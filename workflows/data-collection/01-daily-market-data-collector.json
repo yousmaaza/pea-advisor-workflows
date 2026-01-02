@@ -40,7 +40,9 @@
       "parameters": {
         "url": "=https://query1.finance.yahoo.com/v8/finance/chart/{{ $json.ticker }}?interval=1d&range=1d",
         "options": {
-          "timeout": 10000
+          "timeout": 10000,
+          "batchSize": 1,
+          "batchInterval": 2000
         }
       },
       "id": "fetch-yahoo",
