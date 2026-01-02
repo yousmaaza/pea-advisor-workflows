@@ -1,0 +1,161 @@
+{
+  "name": "01-daily-market-data-collector",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Déclencheur Quotidien",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, ticker, name FROM stocks WHERE is_pea_eligible = true AND is_active = true ORDER BY ticker;",
+        "options": {}
+      },
+      "id": "get-stocks",
+      "name": "Récupérer les actions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://query1.finance.yahoo.com/v8/finance/chart/{{ $json.ticker }}?interval=1d&range=1d",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "fetch-yahoo",
+      "name": "Yahoo Finance API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parser la réponse Yahoo Finance\nconst input = $input.item.json;\nconst stockInfo = $('Récupérer les actions').item.json;\n\ntry {\n  if (input.chart && input.chart.result && input.chart.result[0]) {\n    const chart = input.chart.result[0];\n    const quote = chart.indicators.quote[0];\n    const timestamp = chart.timestamp[0];\n    \n    // Convertir timestamp en date\n    const date = new Date(timestamp * 1000).toISOString().split('T')[0];\n    \n    return {\n      json: {\n        stock_id: stockInfo.id,\n        ticker: stockInfo.ticker,\n        name: stockInfo.name,\n        date: date,\n        open: quote.open[0],\n        high: quote.high[0],\n        low: quote.low[0],\n        close: quote.close[0],\n        volume: quote.volume[0],\n        adjusted_close: chart.indicators.adjclose ? chart.indicators.adjclose[0].adjclose[0] : quote.close[0],\n        success: true\n      }\n    };\n  } else {\n    return {\n      json: {\n        stock_id: stockInfo.id,\n        ticker: stockInfo.ticker,\n        name: stockInfo.name,\n        success: false,\n        error: 'No data in response'\n      }\n    };\n  }\n} catch (error) {\n  return {\n    json: {\n      stock_id: stockInfo.id,\n      ticker: stockInfo.ticker,\n      name: stockInfo.name,\n      success: false,\n      error: error.message\n    }\n  };\n}"
+      },
+      "id": "parse-response",
+      "name": "Parser réponse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-success",
+      "name": "Filtrer succès",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO stock_prices (stock_id, date, open, high, low, close, volume, adjusted_close, created_at)\nVALUES (\n  {{ $json.stock_id }},\n  '{{ $json.date }}',\n  {{ $json.open }},\n  {{ $json.high }},\n  {{ $json.low }},\n  {{ $json.close }},\n  {{ $json.volume }},\n  {{ $json.adjusted_close }},\n  CURRENT_TIMESTAMP\n)\nON CONFLICT (stock_id, date) \nDO UPDATE SET\n  open = EXCLUDED.open,\n  high = EXCLUDED.high,\n  low = EXCLUDED.low,\n  close = EXCLUDED.close,\n  volume = EXCLUDED.volume,\n  adjusted_close = EXCLUDED.adjusted_close,\n  created_at = CURRENT_TIMESTAMP\nRETURNING stock_id, date, close;",
+        "options": {}
+      },
+      "id": "insert-db",
+      "name": "Insérer en BDD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1340, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO system_logs (workflow_name, level, message, details, created_at)\nVALUES (\n  'daily-market-data-collector',\n  'info',\n  'Prix collecté pour {{ $json.ticker }}',\n  jsonb_build_object(\n    'stock_id', {{ $json.stock_id }},\n    'date', '{{ $json.date }}',\n    'close', {{ $json.close }}\n  ),\n  CURRENT_TIMESTAMP\n);",
+        "options": {}
+      },
+      "id": "log-success",
+      "name": "Log succès",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Déclencheur Quotidien": {
+      "main": [[{"node": "Récupérer les actions", "type": "main", "index": 0}]]
+    },
+    "Récupérer les actions": {
+      "main": [[{"node": "Yahoo Finance API", "type": "main", "index": 0}]]
+    },
+    "Yahoo Finance API": {
+      "main": [[{"node": "Parser réponse", "type": "main", "index": 0}]]
+    },
+    "Parser réponse": {
+      "main": [[{"node": "Filtrer succès", "type": "main", "index": 0}]]
+    },
+    "Filtrer succès": {
+      "main": [[{"node": "Insérer en BDD", "type": "main", "index": 0}]]
+    },
+    "Insérer en BDD": {
+      "main": [[{"node": "Log succès", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {"id": "1", "name": "PEA Advisor"},
+    {"id": "2", "name": "Data Collection"}
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-02T23:30:00.000Z",
+  "versionId": "1.0"
+}

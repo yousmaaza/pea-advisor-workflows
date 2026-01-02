@@ -1,0 +1,81 @@
+# Variables d'environnement
+.env
+config/.env
+
+# Bases de données locales
+*.db
+*.sqlite
+*.sqlite3
+
+# Backups
+backups/
+*.sql.gz
+*.dump
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Données sensibles
+credentials/
+secrets/
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+ENV/
+
+# Node modules (si utilisation de scripts JS)
+node_modules/
+
+# Fichiers temporaires
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Cache
+.cache/
+*.cache
+
+# Données de test
+test-data/
+mock-data/
+
+# Rapports générés
+reports/*.pdf
+reports/*.html
+exports/
+
+# N8N credentials (ne JAMAIS commit)
+n8n-credentials.json
+
+# Docker volumes
+docker-volumes/
