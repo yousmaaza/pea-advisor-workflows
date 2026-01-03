@@ -5,20 +5,203 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 
 ---
 
+## 📊 État Actuel du Projet
+
+### ✅ Complété (3 janvier 2026)
+
+#### Workflows Opérationnels
+- ✅ **Workflow 01**: Daily Market Data Collector (Yahoo Finance)
+  - Architecture Python + Merge node
+  - Variables n8n: `_item`, `_items` (avec underscore)
+  - Collecte quotidienne des prix (open, high, low, close, volume)
+  - Documentation complète
+
+- ✅ **Workflow 02**: News Collector (NewsAPI)
+  - 5 articles par action, expansion d'items (1 stock → 5 articles)
+  - Mode Python: `runOnceForAllItems` avec boucle sur `_items`
+  - Opération native PostgreSQL `insert` (protection SQL injection)
+  - Rate limiting: 2s entre requêtes
+  - Documentation complète
+
+#### Documentation
+- ✅ Guide configuration API keys n8n (4 méthodes)
+- ✅ Guide Python variables n8n (_item vs item)
+- ✅ Architecture Python + Merge node
+- ✅ Guide workflow 01 (market data)
+- ✅ Guide workflow 02 (news collector)
+- ✅ Notes dépréciation Alpha Vantage
+- ✅ Fichier .claude pour le projet
+
+#### Décisions Techniques
+- ✅ Migration JavaScript → Python pour tous les workflows
+- ✅ Architecture Merge node (combine data sources)
+- ✅ Abandon Alpha Vantage (rate limits: 1 req/s, 25 req/jour)
+- ✅ Calcul local des indicateurs techniques (TA-Lib) au lieu d'API externe
+
+---
+
+## 🔥 Prochaines Priorités (Par Ordre)
+
+### 🔴 PRIORITÉ CRITIQUE
+
+#### 1. Workflow 00: Historical Data Loader ⚡️
+**Statut**: 📋 À faire
+**Durée estimée**: 2h de développement + 2 min d'exécution
+**Bloquant pour**: Workflow 03 (calcul indicateurs techniques)
+
+**Pourquoi MAINTENANT**:
+- Sans historique, impossible de calculer RSI (14 jours), MACD (26 jours), SMA 200 (200 jours)
+- Le workflow 01 actuel ne récupère que 1 jour par exécution
+- Doit être lancé UNE SEULE FOIS au démarrage
+
+**Détails**:
+- Récupérer 250 jours d'historique via Yahoo Finance (1 requête par action)
+- API endpoint: `https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1y&interval=1d`
+- Insérer en batch dans table `stock_prices`
+- Gratuit, illimité, rapide (~2 minutes pour 50 actions)
+
+**Architecture**:
+```
+Trigger manuel
+  ↓
+SELECT stocks (actives + PEA eligible)
+  ↓
+HTTP Request Yahoo Finance (range=1y, batch processing)
+  ↓
+Merge stock data + historical prices
+  ↓
+Python parser (extract OHLCV for each day)
+  ↓
+Batch INSERT into stock_prices
+  ↓
+Log success
+```
+
+---
+
+#### 2. Workflow 03: Technical Indicators Calculator (Local) ⚡️
+**Statut**: 📋 À faire
+**Durée estimée**: 4h de développement
+**Dépendances**: Workflow 00 (historique)
+
+**Pourquoi local et pas API externe**:
+- ❌ Alpha Vantage: 1 req/sec, 25 req/jour → 50 actions = 2 jours minimum
+- ❌ Version payante: $50/mois
+- ✅ **TA-Lib local**: Gratuit, illimité, 1000x plus rapide (5 secondes pour 50 actions)
+
+**Indicateurs à calculer**:
+1. RSI (14 jours) - Relative Strength Index
+2. MACD (12, 26, 9) - Moving Average Convergence Divergence
+3. SMA (20, 50, 200) - Simple Moving Average
+4. EMA (20) - Exponential Moving Average
+5. Bandes de Bollinger (20, 2)
+6. ATR (14) - Average True Range
+
+**Architecture**:
+```
+Trigger quotidien (19h15, après workflow 01)
+  ↓
+SELECT stocks (actives + PEA eligible)
+  ↓
+Pour chaque action:
+  SELECT last 250 days FROM stock_prices
+  ↓
+Python Code (TA-Lib):
+  - Calcul tous les indicateurs en une passe
+  - Détection signaux (surachat/survente, croisements)
+  ↓
+INSERT/UPDATE technical_indicators
+  ↓
+Log success
+```
+
+**Dépendances techniques**:
+- Installation TA-Lib dans environnement Python n8n
+- Tables: `stock_prices` (source), `technical_indicators` (destination)
+
+---
+
+### 🟡 PRIORITÉ MOYENNE
+
+#### 3. Workflow 08: AI News Analyzer 🤖
+**Statut**: 📋 À faire
+**Durée estimée**: 3h
+**Dépendances**: Workflow 02 (news collector)
+
+**Pourquoi maintenant**: On collecte déjà des news, autant les analyser rapidement
+
+**Objectif**: Analyser le sentiment des articles collectés avec IA (OpenAI/Claude)
+
+**Architecture**:
+```
+Trigger quotidien (20h, après news collector)
+  ↓
+SELECT news WHERE sentiment_score IS NULL LIMIT 50
+  ↓
+HTTP Request OpenAI/Claude API
+  Prompt: "Analyse le sentiment et l'impact de cet article sur l'action"
+  ↓
+Parse réponse IA:
+  - sentiment_score (-10 à +10)
+  - sentiment_label (negative/neutral/positive)
+  - impact_score (0 à 10)
+  - ai_summary (résumé)
+  - ai_key_points (points clés JSON)
+  ↓
+UPDATE news SET sentiment_score = ..., analyzed_at = NOW()
+  ↓
+Log success
+```
+
+**Coûts API**:
+- OpenAI GPT-4o-mini: ~$0.15 pour 1000 articles
+- Claude Sonnet: ~$3 pour 1000 articles
+- Budget mensuel estimé: $5-10 pour 50 actions × 5 articles/jour
+
+---
+
+#### 4. Workflow 04: Fundamental Data Collector 📊
+**Statut**: 📋 À faire
+**Durée estimée**: 5h
+
+**Objectif**: Collecter données fondamentales (P/E, P/B, ROE, dividendes)
+
+**Sources possibles**:
+- Yahoo Finance (gratuit, mais limité)
+- Financial Modeling Prep (gratuit: 250 req/jour)
+- Alpha Vantage (déjà écarté pour les indicateurs techniques)
+
+**Fréquence**: Hebdomadaire (données fondamentales changent lentement)
+
+---
+
+### 🟢 PRIORITÉ BASSE (Plus tard)
+
+- Workflow 05: Pattern Detector (croix dorée, supports/résistances)
+- Workflow 06: Fundamental Analysis (scores Value, Growth, Quality)
+- Workflow 07: Stock Screener
+- Workflow 09: AI Recommendation Engine
+- Workflows 10-11: Portfolio Management
+- Workflows 12-13: Risk Management & Alerts
+- Workflows 14-16: Reporting & Notifications
+- Workflow 17: Backtesting
+
+---
+
 ## 📅 Phase 1 : Infrastructure & Configuration (Semaine 1-2)
 
 ### ✅ Configuration de base
 - [x] Créer la structure de dossiers
-- [ ] Configurer les variables d'environnement (.env)
-- [ ] Documenter les API keys nécessaires
+- [x] Configurer les variables d'environnement (.env)
+- [x] Documenter les API keys nécessaires (guide complet créé)
 - [ ] Créer le schéma de base de données PostgreSQL
 - [ ] Initialiser les tables de données
 
 ### 🔌 Connexions API à configurer
-- [ ] Yahoo Finance API (gratuit)
-- [ ] Alpha Vantage API (clé gratuite)
+- [x] Yahoo Finance API (gratuit) - Utilisé dans workflow 01
+- [x] ~~Alpha Vantage API~~ - **ABANDONNÉ** (rate limits trop restrictifs)
 - [ ] Financial Modeling Prep API
-- [ ] NewsAPI pour les actualités
+- [x] NewsAPI pour les actualités - Utilisé dans workflow 02
 - [ ] OpenAI/Claude API pour l'IA
 - [ ] Telegram Bot (pour notifications)
 
@@ -34,20 +217,25 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 
 ## 📊 Phase 2 : Collecte de Données (Semaine 3-4)
 
-### Workflow 1 : Collecte des prix de marché
-- [ ] Créer `01-daily-market-data-collector.json`
-- [ ] Définir la liste des actions éligibles PEA
-- [ ] Récupérer les prix de clôture quotidiens
-- [ ] Stocker dans PostgreSQL
-- [ ] Gérer les erreurs et retry
-- [ ] Tester avec 5-10 actions
+### ✅ Workflow 1 : Collecte des prix de marché (COMPLÉTÉ)
+- [x] Créer `01-daily-market-data-collector.json`
+- [x] Définir la liste des actions éligibles PEA
+- [x] Récupérer les prix de clôture quotidiens (OHLCV)
+- [x] Stocker dans PostgreSQL
+- [x] Gérer les erreurs et retry
+- [x] Tester avec 5-10 actions
+- [x] Migration vers Python + Merge node
+- [x] Documentation complète
 
-### Workflow 2 : Collecte des actualités financières
-- [ ] Créer `02-news-collector.json`
-- [ ] Configurer NewsAPI
-- [ ] Filtrer les news pertinentes (CAC40, valeurs suivies)
-- [ ] Stocker les articles
-- [ ] Planifier exécution toutes les 4h
+### ✅ Workflow 2 : Collecte des actualités financières (COMPLÉTÉ)
+- [x] Créer `02-news-collector.json`
+- [x] Configurer NewsAPI
+- [x] Filtrer les news pertinentes (5 articles par action)
+- [x] Stocker les articles
+- [x] Planifier exécution toutes les 4h
+- [x] Gérer expansion d'items (1 action → 5 articles)
+- [x] Protection SQL injection (native insert operation)
+- [x] Documentation complète
 
 ### Workflow 3 : Collecte des données fondamentales
 - [ ] Créer `03-fundamental-data-collector.json`
@@ -194,10 +382,10 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 - [ ] Documenter performances
 
 ### Documentation
-- [ ] Documenter chaque workflow
-- [ ] Créer guide d'utilisation
-- [ ] Documenter les stratégies
-- [ ] Exemples de configuration
+- [x] Documenter chaque workflow (01, 02 complétés)
+- [x] Créer guide d'utilisation (API keys, Python variables, architecture)
+- [x] Documenter les stratégies (Migration Python, Merge node)
+- [x] Exemples de configuration (4 méthodes API keys)
 - [ ] FAQ
 
 ---
@@ -275,84 +463,7 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 
 ---
 
-## 📝 Notes & Idées
-
-### 🔥 Priorités - À Implémenter Prochainement
-
-#### Workflow 00: Historical Data Loader (CRITIQUE)
-**Statut**: 📋 À faire
-**Priorité**: 🔴 HAUTE
-
-**Objectif**: Charger l'historique initial des prix pour permettre le calcul des indicateurs techniques
-
-**Détails**:
-- Récupérer 250 jours d'historique via Yahoo Finance (range=1y)
-- Une seule requête par action (pas 250!)
-- Insérer en batch dans stock_prices
-- À lancer UNE SEULE FOIS au début
-- Durée: ~2 minutes pour 50 actions
-- Gratuit, illimité
-
-**Pourquoi c'est critique**:
-- Sans historique, impossible de calculer RSI (14 jours), MACD (26 jours), SMA 200 (200 jours)
-- Le workflow 01 actuel ne récupère que 1 jour
-- Doit être fait AVANT le workflow de calcul des indicateurs
-
-#### Workflow 02-bis: Technical Indicators Calculator (LOCAL)
-**Statut**: 📋 À faire
-**Priorité**: 🔴 HAUTE
-
-**Objectif**: Calculer TOUS les indicateurs techniques localement au lieu d'utiliser Alpha Vantage
-
-**Raisons d'abandonner Alpha Vantage**:
-- ❌ Rate limit: 1 req/seconde (trop lent)
-- ❌ Limite gratuite: 25 req/jour (insuffisant pour 50 actions)
-- ❌ Pour 50 actions × 5 indicateurs = 250 requêtes = 10 JOURS!
-- ❌ Version payante: $50/mois
-- ✅ **Alternative**: Calcul local avec TA-Lib/pandas-ta
-
-**Détails de l'implémentation**:
-```python
-# Bibliothèque: TA-Lib (Technical Analysis Library)
-import talib
-
-# Lecture depuis stock_prices (on a déjà les données!)
-prices = get_stock_prices(stock_id, last_250_days)
-
-# Calcul de TOUS les indicateurs en une passe
-rsi_14 = talib.RSI(prices['close'], timeperiod=14)
-macd, macd_signal, macd_hist = talib.MACD(prices['close'], 12, 26, 9)
-sma_20 = talib.SMA(prices['close'], timeperiod=20)
-sma_50 = talib.SMA(prices['close'], timeperiod=50)
-sma_200 = talib.SMA(prices['close'], timeperiod=200)
-ema_20 = talib.EMA(prices['close'], timeperiod=20)
-bb_upper, bb_middle, bb_lower = talib.BBANDS(prices['close'], 20, 2, 2)
-atr_14 = talib.ATR(prices['high'], prices['low'], prices['close'], 14)
-
-# Insertion en BDD
-INSERT INTO technical_indicators (stock_id, date, rsi_14, macd, ...)
-```
-
-**Avantages**:
-- ✅ 1000x plus rapide (5 secondes pour 50 actions vs 10 jours!)
-- ✅ Gratuit et illimité
-- ✅ Plus de contrôle sur les paramètres
-- ✅ Tous les indicateurs en une seule passe
-- ✅ Pas de dépendance externe
-
-**Architecture**:
-1. Trigger quotidien 19h (après workflow 01)
-2. SELECT prix depuis stock_prices (250 derniers jours)
-3. Calcul Python avec TA-Lib
-4. INSERT dans technical_indicators
-
-**Dépendances**:
-- Workflow 00 (historique) doit être exécuté d'abord
-- TA-Lib doit être installé dans n8n Python
-
----
-
-### Idées futures
+## 💡 Idées Futures
 - Intégration avec compte Boursorama (lecture seule via scraping)
 - ML pour prédiction de tendances
 - Analyse de corrélation avec matières premières
@@ -369,6 +480,12 @@ INSERT INTO technical_indicators (stock_id, date, rsi_14, macd, ...)
 
 ---
 
-**Dernière mise à jour** : 2 janvier 2026
-**Version** : 1.0
-**Statut** : 🚧 En construction
+**Dernière mise à jour** : 3 janvier 2026
+**Version** : 1.1
+**Statut** : 🚧 En construction active
+
+**Progression**: 2/17 workflows complétés (12%)
+- ✅ Workflow 01: Daily Market Data Collector
+- ✅ Workflow 02: News Collector
+- 🔜 Workflow 00: Historical Data Loader (PRIORITÉ CRITIQUE)
+- 🔜 Workflow 03: Technical Indicators Calculator
