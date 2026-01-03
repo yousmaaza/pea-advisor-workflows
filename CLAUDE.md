@@ -192,7 +192,7 @@ n8n execute --id <workflow-id>
 4. **Backup**: Sauvegardes automatiques de la base de données recommandées
 5. **Conformité PEA**: Toujours vérifier l'éligibilité avant de recommander une action
 6. **Documentation**: Toujours se référer à la documentation pour les mises à jour et changements. Egalement a chaque ajout d'un nouvelle documentation ou modification rajouter seulement dans le dossier `/docs/` 
-
+7. **TODO**: Voir `/TODO.md` pour la liste complète des tâches et la roadmap. Mettre à jour régulièrement avec les progrès.
 ## Statut du Projet
 
 **Version**: 1.0
