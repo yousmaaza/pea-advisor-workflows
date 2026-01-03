@@ -63,6 +63,17 @@ Le système doit TOUJOURS respecter les règles du PEA:
 - Les credentials sont référencées par ID, jamais en dur
 - Utiliser les variables d'environnement pour les API keys
 - Implémenter retry logic avec backoff exponentiel
+- **Langage Python avec Node Merge**: Architecture actuelle (v1.1+)
+  - Utilise un node `Merge` pour combiner les données stocks + Yahoo Finance
+  - ⚠️ **IMPORTANT**: Utiliser `_item` (avec underscore), pas `item`
+  - Variables disponibles: `_item`, `_items`, `_input` (tous avec underscore)
+  - Pas d'accès à `$itemIndex` ou `$node` en Python (d'où le besoin du Merge)
+  - Mode: `runOnceForEachItem` avec `language: "python"`
+  - Configuration Merge: `"mode": "combine"` et `"combinationMode": "mergeByPosition"`
+  - Imports disponibles: `datetime`, `json`, etc.
+  - **Guide variables Python**: `docs/python-variables-n8n.md` (_item vs item)
+  - **Architecture détaillée**: `docs/python-workflow-architecture.md`
+  - **Guide de migration**: `docs/python-migration-guide.md`
 
 ### API Usage
 - **Yahoo Finance**: Prix de marché (gratuit, rate limits)
@@ -111,7 +122,8 @@ Le système doit TOUJOURS respecter les règles du PEA:
 ### Tests et Validation
 - Utiliser les scripts dans `scripts/` pour valider les changements
 - `test-db-connection.sh`: Vérifier la connexion PostgreSQL
-- `test-parser-logic.js`: Valider la logique de parsing
+- `test-parser-logic.js`: Valider la logique de parsing (JavaScript)
+- `test-python-parser.py`: Valider la logique de parsing (Python)
 - `test-yahoo-api.js`: Tester l'API Yahoo Finance
 - Toujours tester avec des données réelles avant de déployer
 
@@ -158,6 +170,9 @@ n8n execute --id <workflow-id>
 - **Démarrage rapide**: `/docs/QUICKSTART.md`
 - **Architecture**: `/docs/architecture.md`
 - **Guide workflow principal**: `/docs/workflow-01-guide.md`
+- **Migration Python**: `/docs/python-migration-guide.md`
+- **Architecture Python + Merge**: `/docs/python-workflow-architecture.md`
+- **Variables Python n8n** ⭐: `/docs/python-variables-n8n.md` (Guide _item vs item)
 - **Troubleshooting**: `/docs/troubleshooting-workflow-01.md`
 - **Roadmap**: `/TODO.md`
 

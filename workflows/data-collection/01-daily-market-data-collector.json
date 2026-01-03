@@ -49,17 +49,31 @@
       "name": "Yahoo Finance API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [680, 300]
+      "position": [680, 200]
     },
     {
       "parameters": {
-        "jsCode": "// Parser la réponse Yahoo Finance\nconst yahooResponse = $input.item.json;\n\n// Récupérer l'index de l'item actuel\nconst itemIndex = $itemIndex;\nconst allStocks = $node['Récupérer les actions'].json;\nconst stockInfo = allStocks[itemIndex];\n\ntry {\n  if (yahooResponse.chart && yahooResponse.chart.result && yahooResponse.chart.result[0]) {\n    const chart = yahooResponse.chart.result[0];\n    const quote = chart.indicators.quote[0];\n    const timestamp = chart.timestamp[0];\n    \n    // Convertir timestamp en date\n    const date = new Date(timestamp * 1000).toISOString().split('T')[0];\n    \n    return {\n      json: {\n        stock_id: stockInfo.id,\n        ticker: stockInfo.ticker,\n        name: stockInfo.name,\n        date: date,\n        open: quote.open[0],\n        high: quote.high[0],\n        low: quote.low[0],\n        close: quote.close[0],\n        volume: quote.volume[0],\n        adjusted_close: chart.indicators.adjclose ? chart.indicators.adjclose[0].adjclose[0] : quote.close[0],\n        success: true\n      }\n    };\n  } else {\n    return {\n      json: {\n        stock_id: stockInfo ? stockInfo.id : null,\n        ticker: stockInfo ? stockInfo.ticker : 'unknown',\n        name: stockInfo ? stockInfo.name : 'unknown',\n        success: false,\n        error: 'No data in response'\n      }\n    };\n  }\n} catch (error) {\n  return {\n    json: {\n      stock_id: null,\n      ticker: 'error',\n      name: 'error',\n      success: false,\n      error: error.message\n    }\n  };\n}"
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-data",
+      "name": "Combiner données",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "python",
+        "pythonCode": "from datetime import datetime\n\n# Récupérer les données combinées depuis le Merge\n# IMPORTANT: Utiliser _item (avec underscore) en Python n8n\nmerged_data = _item['json']\n\n# Extraire les données du stock (venant de PostgreSQL)\nstock_info = {\n    'id': merged_data.get('id'),\n    'ticker': merged_data.get('ticker'),\n    'name': merged_data.get('name')\n}\n\n# Les données Yahoo Finance sont aussi dans merged_data\nyahoo_response = merged_data\n\ntry:\n    # Vérifier si on a les données Yahoo Finance\n    if yahoo_response.get('chart') and yahoo_response['chart'].get('result') and len(yahoo_response['chart']['result']) > 0:\n        chart = yahoo_response['chart']['result'][0]\n        quote = chart['indicators']['quote'][0]\n        timestamp = chart['timestamp'][0]\n        \n        # Convertir timestamp en date\n        date = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d')\n        \n        # Récupérer adjusted close si disponible\n        adj_close_data = chart['indicators'].get('adjclose')\n        if adj_close_data and len(adj_close_data) > 0 and adj_close_data[0].get('adjclose'):\n            adjusted_close = adj_close_data[0]['adjclose'][0]\n        else:\n            adjusted_close = quote['close'][0]\n        \n        return {\n            'json': {\n                'stock_id': stock_info['id'],\n                'ticker': stock_info['ticker'],\n                'name': stock_info['name'],\n                'date': date,\n                'open': quote['open'][0],\n                'high': quote['high'][0],\n                'low': quote['low'][0],\n                'close': quote['close'][0],\n                'volume': quote['volume'][0],\n                'adjusted_close': adjusted_close,\n                'success': True\n            }\n        }\n    else:\n        return {\n            'json': {\n                'stock_id': stock_info['id'],\n                'ticker': stock_info['ticker'],\n                'name': stock_info['name'],\n                'success': False,\n                'error': 'No data in response'\n            }\n        }\nexcept Exception as error:\n    return {\n        'json': {\n            'stock_id': stock_info.get('id') if 'stock_info' in locals() else None,\n            'ticker': stock_info.get('ticker', 'error') if 'stock_info' in locals() else 'error',\n            'name': stock_info.get('name', 'error') if 'stock_info' in locals() else 'error',\n            'success': False,\n            'error': str(error)\n        }\n    }"
       },
       "id": "parse-response",
-      "name": "Parser réponse",
+      "name": "Parser réponse Python",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [1120, 300]
     },
     {
       "parameters": {
@@ -87,7 +101,7 @@
       "name": "Filtrer succès",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [1340, 300]
     },
     {
       "parameters": {
@@ -99,7 +113,7 @@
       "name": "Insérer en BDD",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1340, 300],
+      "position": [1560, 300],
       "credentials": {
         "postgres": {
           "id": "1",
@@ -117,7 +131,7 @@
       "name": "Log succès",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1560, 300],
+      "position": [1780, 300],
       "credentials": {
         "postgres": {
           "id": "1",
@@ -131,12 +145,20 @@
       "main": [[{"node": "Récupérer les actions", "type": "main", "index": 0}]]
     },
     "Récupérer les actions": {
-      "main": [[{"node": "Yahoo Finance API", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {"node": "Yahoo Finance API", "type": "main", "index": 0},
+          {"node": "Combiner données", "type": "main", "index": 0}
+        ]
+      ]
     },
     "Yahoo Finance API": {
-      "main": [[{"node": "Parser réponse", "type": "main", "index": 0}]]
+      "main": [[{"node": "Combiner données", "type": "main", "index": 1}]]
     },
-    "Parser réponse": {
+    "Combiner données": {
+      "main": [[{"node": "Parser réponse Python", "type": "main", "index": 0}]]
+    },
+    "Parser réponse Python": {
       "main": [[{"node": "Filtrer succès", "type": "main", "index": 0}]]
     },
     "Filtrer succès": {
@@ -158,6 +180,6 @@
     {"id": "2", "name": "Data Collection"}
   ],
   "triggerCount": 1,
-  "updatedAt": "2026-01-02T23:30:00.000Z",
-  "versionId": "1.0"
+  "updatedAt": "2026-01-03T10:00:00.000Z",
+  "versionId": "1.1"
 }
