@@ -1,0 +1,203 @@
+{
+  "name": "00-historical-data-loader",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Déclencheur Manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, ticker, name FROM stocks WHERE is_pea_eligible = true AND is_active = true ORDER BY ticker;",
+        "options": {}
+      },
+      "id": "get-stocks",
+      "name": "Récupérer les actions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://query1.finance.yahoo.com/v8/finance/chart/{{ $json.ticker }}?range=1y&interval=1d",
+        "options": {
+          "timeout": 30000,
+          "batchSize": 5,
+          "batchInterval": 2000
+        }
+      },
+      "id": "fetch-historical-data",
+      "name": "Yahoo Finance Historical",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-data",
+      "name": "Combiner données",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "python",
+        "pythonCode": "from datetime import datetime\n\nresults = []\n\n# Traiter chaque action (stock + historical data)\nfor item in _items:\n    merged_data = item['json']\n    \n    # Extraire les données du stock\n    stock_info = {\n        'id': merged_data.get('id'),\n        'ticker': merged_data.get('ticker'),\n        'name': merged_data.get('name')\n    }\n    \n    # Extraire les données Yahoo Finance\n    yahoo_response = merged_data\n    \n    try:\n        # Vérifier la structure de la réponse\n        if yahoo_response.get('chart') and yahoo_response['chart'].get('result'):\n            chart_data = yahoo_response['chart']['result'][0]\n            \n            # Extraire les timestamps et les données\n            timestamps = chart_data.get('timestamp', [])\n            quote_data = chart_data.get('indicators', {}).get('quote', [{}])[0]\n            \n            # Extraire les arrays OHLCV\n            opens = quote_data.get('open', [])\n            highs = quote_data.get('high', [])\n            lows = quote_data.get('low', [])\n            closes = quote_data.get('close', [])\n            volumes = quote_data.get('volume', [])\n            \n            # Créer un item pour chaque jour d'historique\n            for i in range(len(timestamps)):\n                # Convertir timestamp Unix en date\n                date = datetime.fromtimestamp(timestamps[i]).strftime('%Y-%m-%d')\n                \n                # Gérer les valeurs None\n                open_price = opens[i] if opens[i] is not None else 0.0\n                high_price = highs[i] if highs[i] is not None else 0.0\n                low_price = lows[i] if lows[i] is not None else 0.0\n                close_price = closes[i] if closes[i] is not None else 0.0\n                volume = volumes[i] if volumes[i] is not None else 0\n                \n                # Skip les jours avec des données invalides\n                if close_price == 0.0:\n                    continue\n                \n                # Créer un item pour ce jour\n                day_data = {\n                    'stock_id': stock_info['id'],\n                    'ticker': stock_info['ticker'],\n                    'date': date,\n                    'open': round(open_price, 4),\n                    'high': round(high_price, 4),\n                    'low': round(low_price, 4),\n                    'close': round(close_price, 4),\n                    'volume': int(volume),\n                    'success': True\n                }\n                results.append({'json': day_data})\n            \n            # Si aucune donnée valide trouvée\n            if len([r for r in results if r['json'].get('stock_id') == stock_info['id']]) == 0:\n                results.append({\n                    'json': {\n                        'stock_id': stock_info['id'],\n                        'ticker': stock_info['ticker'],\n                        'success': False,\n                        'error': 'No valid price data found'\n                    }\n                })\n        \n        else:\n            # Erreur API ou données manquantes\n            error_msg = yahoo_response.get('chart', {}).get('error', {}).get('description', 'Unknown error')\n            results.append({\n                'json': {\n                    'stock_id': stock_info['id'],\n                    'ticker': stock_info['ticker'],\n                    'success': False,\n                    'error': error_msg\n                }\n            })\n    \n    except Exception as error:\n        results.append({\n            'json': {\n                'stock_id': stock_info.get('id', None),\n                'ticker': stock_info.get('ticker', 'error'),\n                'success': False,\n                'error': str(error)\n            }\n        })\n\nreturn results"
+      },
+      "id": "parse-historical",
+      "name": "Parser Historical Python",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-success",
+      "name": "Filtrer succès",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "stock_prices",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "stock_id": "={{ $json.stock_id }}",
+            "date": "={{ $json.date }}",
+            "open": "={{ $json.open }}",
+            "high": "={{ $json.high }}",
+            "low": "={{ $json.low }}",
+            "close": "={{ $json.close }}",
+            "volume": "={{ $json.volume }}"
+          }
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      },
+      "id": "insert-db",
+      "name": "Insérer en BDD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "system_logs",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_name": "historical-data-loader",
+            "level": "info",
+            "message": "={{ 'Historique chargé pour ' + $json.ticker + ' (' + $json.date + ')' }}",
+            "details": "={{ { stock_id: $json.stock_id, date: $json.date, close: $json.close, volume: $json.volume } }}",
+            "created_at": "={{ $now }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-success",
+      "name": "Log succès",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1780, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Déclencheur Manuel": {
+      "main": [[{"node": "Récupérer les actions", "type": "main", "index": 0}]]
+    },
+    "Récupérer les actions": {
+      "main": [
+        [
+          {"node": "Yahoo Finance Historical", "type": "main", "index": 0},
+          {"node": "Combiner données", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Yahoo Finance Historical": {
+      "main": [[{"node": "Combiner données", "type": "main", "index": 1}]]
+    },
+    "Combiner données": {
+      "main": [[{"node": "Parser Historical Python", "type": "main", "index": 0}]]
+    },
+    "Parser Historical Python": {
+      "main": [[{"node": "Filtrer succès", "type": "main", "index": 0}]]
+    },
+    "Filtrer succès": {
+      "main": [[{"node": "Insérer en BDD", "type": "main", "index": 0}]]
+    },
+    "Insérer en BDD": {
+      "main": [[{"node": "Log succès", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {"id": "1", "name": "PEA Advisor"},
+    {"id": "2", "name": "Data Collection"},
+    {"id": "5", "name": "Historical Data"}
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-01-03T12:30:00.000Z",
+  "versionId": "1.0"
+}

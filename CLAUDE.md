@@ -76,8 +76,11 @@ Le système doit TOUJOURS respecter les règles du PEA:
   - **Guide de migration**: `docs/python-migration-guide.md`
 
 ### API Usage
-- **Yahoo Finance**: Prix de marché (gratuit, rate limits)
-- **Alpha Vantage**: Indicateurs techniques (5 calls/min gratuit)
+- **Yahoo Finance**: Prix de marché + historique (gratuit, illimité)
+  - Endpoint daily: `/v8/finance/chart/{ticker}?interval=1d&range=1d`
+  - Endpoint historical: `/v8/finance/chart/{ticker}?interval=1d&range=1y` (250 jours)
+- **Alpha Vantage**: ❌ ABANDONNÉ (rate limits: 1 req/s, 25 req/jour)
+  - Alternative: Calcul local des indicateurs avec TA-Lib
 - **NewsAPI**: Actualités financières (100 calls/jour gratuit)
 - **OpenAI/Claude**: Analyse IA (coût par token)
 - Toujours gérer les rate limits et timeouts
@@ -169,6 +172,7 @@ n8n execute --id <workflow-id>
 - **Documentation principale**: `/docs/README.md`
 - **Démarrage rapide**: `/docs/QUICKSTART.md`
 - **Architecture**: `/docs/architecture.md`
+- **Workflow 00 - Historical Data Loader** ⚡: `/docs/workflow-00-historical-data-loader-guide.md` (CRITIQUE)
 - **Workflow 01 - Prix de marché**: `/docs/workflow-01-guide.md`
 - **Workflow 02 - News Collector**: `/docs/workflow-02-news-collector-guide.md`
 - **Configuration API Keys n8n** 🔑: `/docs/n8n-api-keys-setup.md`
@@ -195,7 +199,12 @@ n8n execute --id <workflow-id>
 7. **TODO**: Voir `/TODO.md` pour la liste complète des tâches et la roadmap. Mettre à jour régulièrement avec les progrès.
 ## Statut du Projet
 
-**Version**: 1.0
+**Version**: 1.2
 **Dernière mise à jour**: 3 janvier 2026
 **Statut**: En développement actif
+
+**Workflows complétés**: 3/17 (18%)
+- ✅ Workflow 00: Historical Data Loader (CRITIQUE - charge 250 jours d'historique)
+- ✅ Workflow 01: Daily Market Data Collector
+- ✅ Workflow 02: News Collector
 

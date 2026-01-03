@@ -10,6 +10,14 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 ### ✅ Complété (3 janvier 2026)
 
 #### Workflows Opérationnels
+- ✅ **Workflow 00**: Historical Data Loader (Yahoo Finance)
+  - Charge 250 jours d'historique (1 an) pour chaque action
+  - Expansion massive: 1 action → 250 jours (~12 500 items pour 50 actions)
+  - Trigger manuel (exécution unique au démarrage)
+  - Durée: ~2-3 minutes pour 50 actions
+  - **CRITIQUE**: Bloque le calcul des indicateurs techniques
+  - Documentation complète
+
 - ✅ **Workflow 01**: Daily Market Data Collector (Yahoo Finance)
   - Architecture Python + Merge node
   - Variables n8n: `_item`, `_items` (avec underscore)
@@ -27,6 +35,7 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 - ✅ Guide configuration API keys n8n (4 méthodes)
 - ✅ Guide Python variables n8n (_item vs item)
 - ✅ Architecture Python + Merge node
+- ✅ Guide workflow 00 (historical data loader)
 - ✅ Guide workflow 01 (market data)
 - ✅ Guide workflow 02 (news collector)
 - ✅ Notes dépréciation Alpha Vantage
@@ -44,45 +53,10 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 
 ### 🔴 PRIORITÉ CRITIQUE
 
-#### 1. Workflow 00: Historical Data Loader ⚡️
-**Statut**: 📋 À faire
-**Durée estimée**: 2h de développement + 2 min d'exécution
-**Bloquant pour**: Workflow 03 (calcul indicateurs techniques)
-
-**Pourquoi MAINTENANT**:
-- Sans historique, impossible de calculer RSI (14 jours), MACD (26 jours), SMA 200 (200 jours)
-- Le workflow 01 actuel ne récupère que 1 jour par exécution
-- Doit être lancé UNE SEULE FOIS au démarrage
-
-**Détails**:
-- Récupérer 250 jours d'historique via Yahoo Finance (1 requête par action)
-- API endpoint: `https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1y&interval=1d`
-- Insérer en batch dans table `stock_prices`
-- Gratuit, illimité, rapide (~2 minutes pour 50 actions)
-
-**Architecture**:
-```
-Trigger manuel
-  ↓
-SELECT stocks (actives + PEA eligible)
-  ↓
-HTTP Request Yahoo Finance (range=1y, batch processing)
-  ↓
-Merge stock data + historical prices
-  ↓
-Python parser (extract OHLCV for each day)
-  ↓
-Batch INSERT into stock_prices
-  ↓
-Log success
-```
-
----
-
-#### 2. Workflow 03: Technical Indicators Calculator (Local) ⚡️
+#### 1. Workflow 03: Technical Indicators Calculator (Local) ⚡️
 **Statut**: 📋 À faire
 **Durée estimée**: 4h de développement
-**Dépendances**: Workflow 00 (historique)
+**Dépendances**: ✅ Workflow 00 (historique) - COMPLÉTÉ
 
 **Pourquoi local et pas API externe**:
 - ❌ Alpha Vantage: 1 req/sec, 25 req/jour → 50 actions = 2 jours minimum
@@ -481,11 +455,12 @@ Log success
 ---
 
 **Dernière mise à jour** : 3 janvier 2026
-**Version** : 1.1
+**Version** : 1.2
 **Statut** : 🚧 En construction active
 
-**Progression**: 2/17 workflows complétés (12%)
+**Progression**: 3/17 workflows complétés (18%)
+- ✅ Workflow 00: Historical Data Loader
 - ✅ Workflow 01: Daily Market Data Collector
 - ✅ Workflow 02: News Collector
-- 🔜 Workflow 00: Historical Data Loader (PRIORITÉ CRITIQUE)
-- 🔜 Workflow 03: Technical Indicators Calculator
+- 🔜 Workflow 03: Technical Indicators Calculator (PRIORITÉ CRITIQUE)
+- 🔜 Workflow 08: AI News Analyzer
