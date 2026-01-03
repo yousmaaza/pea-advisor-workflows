@@ -7,7 +7,7 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 
 ## 📊 État Actuel du Projet
 
-### ✅ Complété (3 janvier 2026)
+### ✅ Complété (4 janvier 2026)
 
 #### Workflows Opérationnels
 - ✅ **Workflow 00**: Historical Data Loader (Yahoo Finance)
@@ -15,13 +15,14 @@ Créer un système intelligent de recommandations pour optimiser les placements 
   - Expansion massive: 1 action → 250 jours (~12 500 items pour 50 actions)
   - Trigger manuel (exécution unique au démarrage)
   - Durée: ~2-3 minutes pour 50 actions
-  - **CRITIQUE**: Bloque le calcul des indicateurs techniques
+  - **FIX**: Extraction correcte du champ `adjusted_close` depuis Yahoo Finance API
   - Documentation complète
 
 - ✅ **Workflow 01**: Daily Market Data Collector (Yahoo Finance)
   - Architecture Python + Merge node
   - Variables n8n: `_item`, `_items` (avec underscore)
-  - Collecte quotidienne des prix (open, high, low, close, volume)
+  - Collecte quotidienne des prix (open, high, low, close, volume, adjusted_close)
+  - Timezone: Europe/Paris (standardisé)
   - Documentation complète
 
 - ✅ **Workflow 02**: News Collector (NewsAPI)
@@ -29,6 +30,7 @@ Créer un système intelligent de recommandations pour optimiser les placements 
   - Mode Python: `runOnceForAllItems` avec boucle sur `_items`
   - Opération native PostgreSQL `insert` (protection SQL injection)
   - Rate limiting: 2s entre requêtes
+  - Timezone: Europe/Paris (standardisé)
   - Documentation complète
 
 - ✅ **Workflow 03**: Technical Indicators Calculator (Local)
@@ -39,6 +41,19 @@ Créer un système intelligent de recommandations pour optimiser les placements 
   - Mode Python: `runOnceForEachItem` (traite chaque stock individuellement)
   - Durée: ~12 secondes pour 50 actions (vs 12 JOURS avec Alpha Vantage!)
   - Schedule: 19h15 quotidien (après workflow 01)
+  - Timezone: Europe/Paris (standardisé)
+  - Documentation complète
+
+- ✅ **Workflow 08**: AI News Sentiment Analyzer (Llama3.2)
+  - **100% gratuit et local** avec Ollama + Llama3.2 (Meta)
+  - Architecture LangChain: Ollama Chat Model + AI Agent + Merge node
+  - Analyse sentiment (-10 à +10), label (negative/neutral/positive), impact (0-10)
+  - Génération de résumés et points clés
+  - Échappement PostgreSQL pour apostrophes dans ai_summary et ai_key_points
+  - Code Python robuste avec gestion d'erreurs et valeurs par défaut
+  - Schedule: 20h quotidien (après news collector)
+  - Timezone: Europe/Paris
+  - Économie: ~15-22€/mois vs OpenAI/Claude
   - Documentation complète
 
 #### Documentation
@@ -49,6 +64,10 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 - ✅ Guide workflow 01 (market data)
 - ✅ Guide workflow 02 (news collector)
 - ✅ Guide workflow 03 (technical indicators calculator)
+- ✅ Guide workflow 08 (AI news sentiment analyzer with Llama3.2)
+- ✅ Convention Timezone (Europe/Paris pour tous les workflows)
+- ✅ Scripts de migration database (TIMESTAMP → TIMESTAMPTZ)
+- ✅ Scripts de nettoyage database (clear_all_tables.sql, clear_data_tables.sql)
 - ✅ Notes dépréciation Alpha Vantage
 - ✅ Fichier .claude pour le projet
 
@@ -57,6 +76,11 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 - ✅ Architecture Merge node (combine data sources)
 - ✅ Abandon Alpha Vantage (rate limits: 1 req/s, 25 req/jour)
 - ✅ Calcul local des indicateurs techniques (TA-Lib) au lieu d'API externe
+- ✅ Timezone standardisé: Europe/Paris pour tous les workflows (Schedule Triggers + Python)
+- ✅ PostgreSQL TIMESTAMPTZ au lieu de TIMESTAMP (timezone-aware)
+- ✅ LLM local avec Ollama + Llama3.2 au lieu de OpenAI/Claude (économie ~20€/mois)
+- ✅ Architecture LangChain pour intégration LLM dans n8n
+- ✅ Échappement PostgreSQL pour apostrophes dans les champs texte IA
 
 ---
 
@@ -64,44 +88,7 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 
 ### 🟡 PRIORITÉ MOYENNE
 
-#### 1. Workflow 08: AI News Analyzer 🤖
-**Statut**: 📋 À faire
-**Durée estimée**: 3h
-**Dépendances**: Workflow 02 (news collector)
-
-**Pourquoi maintenant**: On collecte déjà des news, autant les analyser rapidement
-
-**Objectif**: Analyser le sentiment des articles collectés avec IA (OpenAI/Claude)
-
-**Architecture**:
-```
-Trigger quotidien (20h, après news collector)
-  ↓
-SELECT news WHERE sentiment_score IS NULL LIMIT 50
-  ↓
-HTTP Request OpenAI/Claude API
-  Prompt: "Analyse le sentiment et l'impact de cet article sur l'action"
-  ↓
-Parse réponse IA:
-  - sentiment_score (-10 à +10)
-  - sentiment_label (negative/neutral/positive)
-  - impact_score (0 à 10)
-  - ai_summary (résumé)
-  - ai_key_points (points clés JSON)
-  ↓
-UPDATE news SET sentiment_score = ..., analyzed_at = NOW()
-  ↓
-Log success
-```
-
-**Coûts API**:
-- OpenAI GPT-4o-mini: ~$0.15 pour 1000 articles
-- Claude Sonnet: ~$3 pour 1000 articles
-- Budget mensuel estimé: $5-10 pour 50 actions × 5 articles/jour
-
----
-
-#### 2. Workflow 04: Fundamental Data Collector 📊
+#### 1. Workflow 04: Fundamental Data Collector 📊
 **Statut**: 📋 À faire
 **Durée estimée**: 5h
 
@@ -139,20 +126,23 @@ Log success
 - [ ] Initialiser les tables de données
 
 ### 🔌 Connexions API à configurer
-- [x] Yahoo Finance API (gratuit) - Utilisé dans workflow 01
+- [x] Yahoo Finance API (gratuit) - Utilisé dans workflows 00, 01
 - [x] ~~Alpha Vantage API~~ - **ABANDONNÉ** (rate limits trop restrictifs)
 - [ ] Financial Modeling Prep API
 - [x] NewsAPI pour les actualités - Utilisé dans workflow 02
-- [ ] OpenAI/Claude API pour l'IA
+- [x] ~~OpenAI/Claude API pour l'IA~~ - Remplacé par Ollama + Llama3.2 (local, gratuit)
+- [x] Ollama (local LLM) - Utilisé dans workflow 08
 - [ ] Telegram Bot (pour notifications)
 
 ### 🗄️ Base de données
-- [ ] Créer table `stock_prices` (historique des cours)
+- [x] Créer table `stock_prices` (historique des cours) - TIMESTAMPTZ
 - [ ] Créer table `stock_fundamentals` (données fondamentales)
 - [ ] Créer table `portfolio` (positions actuelles)
 - [ ] Créer table `recommendations` (historique des recommandations)
-- [ ] Créer table `news_sentiment` (analyse des news)
-- [ ] Créer table `technical_indicators` (indicateurs calculés)
+- [x] Créer table `news` avec champs sentiment (sentiment_score, sentiment_label, impact_score, ai_summary, ai_key_points)
+- [x] Créer table `technical_indicators` (indicateurs calculés)
+- [x] Migration TIMESTAMP → TIMESTAMPTZ pour timezone Europe/Paris
+- [x] Scripts de nettoyage database (clear_all_tables.sql, clear_data_tables.sql)
 
 ---
 
@@ -228,13 +218,15 @@ Log success
 
 ## 🤖 Phase 5 : Intelligence Artificielle (Semaine 7)
 
-### Workflow 8 : Analyse de sentiment des news
-- [ ] Créer `08-ai-news-analyzer.json`
-- [ ] Intégrer OpenAI/Claude API
-- [ ] Analyser sentiment (positif/neutre/négatif)
-- [ ] Extraire insights clés
-- [ ] Scorer impact sur cours (-10 à +10)
-- [ ] Stocker résultats
+### ✅ Workflow 8 : Analyse de sentiment des news (COMPLÉTÉ)
+- [x] Créer `08-ai-news-analyzer.json`
+- [x] Intégrer Ollama + Llama3.2 (local, gratuit)
+- [x] Architecture LangChain (Ollama Chat Model + AI Agent + Merge)
+- [x] Analyser sentiment (positif/neutre/négatif)
+- [x] Extraire insights clés (ai_summary, ai_key_points)
+- [x] Scorer impact sur cours (-10 à +10)
+- [x] Stocker résultats avec échappement PostgreSQL
+- [x] Documentation complète
 
 ### Workflow 9 : Génération de recommandations IA
 - [ ] Créer `09-ai-recommendation-engine.json`
@@ -421,14 +413,20 @@ Log success
 
 ---
 
-**Dernière mise à jour** : 3 janvier 2026
-**Version** : 1.3
+**Dernière mise à jour** : 4 janvier 2026
+**Version** : 1.4
 **Statut** : 🚧 En construction active
 
-**Progression**: 4/17 workflows complétés (24%)
-- ✅ Workflow 00: Historical Data Loader
-- ✅ Workflow 01: Daily Market Data Collector
-- ✅ Workflow 02: News Collector
-- ✅ Workflow 03: Technical Indicators Calculator
-- 🔜 Workflow 08: AI News Analyzer (PRIORITÉ MOYENNE)
-- 🔜 Workflow 04: Fundamental Data Collector
+**Progression**: 5/17 workflows complétés (29%)
+- ✅ Workflow 00: Historical Data Loader (avec adjusted_close fix)
+- ✅ Workflow 01: Daily Market Data Collector (avec timezone)
+- ✅ Workflow 02: News Collector (avec timezone)
+- ✅ Workflow 03: Technical Indicators Calculator (avec timezone)
+- ✅ Workflow 08: AI News Sentiment Analyzer (Ollama + Llama3.2)
+- 🔜 Workflow 04: Fundamental Data Collector (PRIORITÉ MOYENNE)
+
+**Améliorations Infrastructure**:
+- ✅ Timezone standardisé (Europe/Paris) sur tous les workflows
+- ✅ Migration PostgreSQL TIMESTAMP → TIMESTAMPTZ
+- ✅ Scripts de nettoyage database
+- ✅ Documentation complète Workflow 08 + Convention Timezone
