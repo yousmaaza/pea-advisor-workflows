@@ -56,6 +56,7 @@ Le système doit TOUJOURS respecter les règles du PEA:
 - Toujours inclure `stock_id` pour les jointures
 - Les prix sont en DECIMAL(10, 2)
 - Les dates sont en format DATE ou TIMESTAMP
+- **Timezone**: Europe/Paris (CET/CEST) configuré dans PostgreSQL
 
 ### Workflows n8n
 - Les workflows sont au format JSON
@@ -74,6 +75,14 @@ Le système doit TOUJOURS respecter les règles du PEA:
   - **Guide variables Python**: `docs/python-variables-n8n.md` (_item vs item)
   - **Architecture détaillée**: `docs/python-workflow-architecture.md`
   - **Guide de migration**: `docs/python-migration-guide.md`
+
+### Timezone Convention
+- **Standard du projet**: Toujours utiliser `Europe/Paris` (CET/CEST)
+- **Schedule Triggers**: Tous doivent inclure `"timezone": "Europe/Paris"`
+- **Python datetime**: Utiliser `from zoneinfo import ZoneInfo` avec `ZoneInfo('Europe/Paris')`
+- **Conversions timestamps**: Toujours spécifier `tz=ZoneInfo('Europe/Paris')`
+- **Documentation complète**: `docs/TIMEZONE_CONVENTION.md`
+- ⚠️ **NE PAS utiliser**: `datetime.now()` sans timezone, `pytz` (obsolète)
 
 ### API Usage
 - **Yahoo Finance**: Prix de marché + historique (gratuit, illimité)
@@ -177,6 +186,7 @@ n8n execute --id <workflow-id>
 - **Workflow 02 - News Collector**: `/docs/workflow-02-news-collector-guide.md`
 - **Workflow 03 - Technical Indicators** 📊: `/docs/workflow-03-technical-indicators-guide.md`
 - **Configuration API Keys n8n** 🔑: `/docs/n8n-api-keys-setup.md`
+- **Convention Timezone** 🌍: `/docs/TIMEZONE_CONVENTION.md` (Europe/Paris standard)
 - **Migration Python**: `/docs/python-migration-guide.md`
 - **Architecture Python + Merge**: `/docs/python-workflow-architecture.md`
 - **Variables Python n8n** ⭐: `/docs/python-variables-n8n.md` (Guide _item vs item)
