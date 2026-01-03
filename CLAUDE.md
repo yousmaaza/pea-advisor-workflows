@@ -185,6 +185,8 @@ n8n execute --id <workflow-id>
 - **Workflow 01 - Prix de marché**: `/docs/workflow-01-guide.md`
 - **Workflow 02 - News Collector**: `/docs/workflow-02-news-collector-guide.md`
 - **Workflow 03 - Technical Indicators** 📊: `/docs/workflow-03-technical-indicators-guide.md`
+- **Workflow 04 - Fundamental Data Collector** 💰: `/docs/workflow-04-fundamental-data-collector-guide.md`
+- **Workflow 08 - AI News Sentiment** 🤖: `/docs/workflow-08-ai-news-sentiment-guide.md`
 - **Configuration API Keys n8n** 🔑: `/docs/n8n-api-keys-setup.md`
 - **Convention Timezone** 🌍: `/docs/TIMEZONE_CONVENTION.md` (Europe/Paris standard)
 - **Migration Python**: `/docs/python-migration-guide.md`
@@ -210,13 +212,18 @@ n8n execute --id <workflow-id>
 7. **TODO**: Voir `/TODO.md` pour la liste complète des tâches et la roadmap. Mettre à jour régulièrement avec les progrès.
 ## Statut du Projet
 
-**Version**: 1.3
-**Dernière mise à jour**: 3 janvier 2026
+**Version**: 1.5
+**Dernière mise à jour**: 4 janvier 2026
 **Statut**: En développement actif
 
-**Workflows complétés**: 4/17 (24%)
+**Workflows complétés**: 6/17 (35%)
 - ✅ Workflow 00: Historical Data Loader (CRITIQUE - charge 250 jours d'historique)
 - ✅ Workflow 01: Daily Market Data Collector
 - ✅ Workflow 02: News Collector
 - ✅ Workflow 03: Technical Indicators Calculator (RSI, MACD, SMA, EMA, Bollinger, ATR)
+- ✅ Workflow 04: Fundamental Data Collector (P/E, P/B, ROE, dividendes, dette, croissance)
+- ✅ Workflow 08: AI News Sentiment Analyzer (Ollama + Llama3.2)
+
+**Prochaine priorité**:
+- 🔜 Workflow 06: Fundamental Analysis Scores (calcul des scores fondamentaux)
 

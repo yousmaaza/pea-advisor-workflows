@@ -44,6 +44,17 @@ Créer un système intelligent de recommandations pour optimiser les placements 
   - Timezone: Europe/Paris (standardisé)
   - Documentation complète
 
+- ✅ **Workflow 04**: Fundamental Data Collector (Yahoo Finance)
+  - Collecte données fondamentales (P/E, P/B, ROE, dividendes, dette, croissance)
+  - Architecture Python + Merge node
+  - Endpoint Yahoo Finance quoteSummary (3 modules: defaultKeyStatistics, financialData, summaryDetail)
+  - Conversion automatique pourcentages (décimal → %)
+  - Gestion des valeurs NULL (données manquantes)
+  - Schedule: Hebdomadaire (dimanche 10h)
+  - Durée: ~2-3 minutes pour 50 actions
+  - Timezone: Europe/Paris (standardisé)
+  - Documentation complète
+
 - ✅ **Workflow 08**: AI News Sentiment Analyzer (Llama3.2)
   - **100% gratuit et local** avec Ollama + Llama3.2 (Meta)
   - Architecture LangChain: Ollama Chat Model + AI Agent + Merge node
@@ -64,6 +75,7 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 - ✅ Guide workflow 01 (market data)
 - ✅ Guide workflow 02 (news collector)
 - ✅ Guide workflow 03 (technical indicators calculator)
+- ✅ Guide workflow 04 (fundamental data collector)
 - ✅ Guide workflow 08 (AI news sentiment analyzer with Llama3.2)
 - ✅ Convention Timezone (Europe/Paris pour tous les workflows)
 - ✅ Scripts de migration database (TIMESTAMP → TIMESTAMPTZ)
@@ -88,18 +100,22 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 
 ### 🟡 PRIORITÉ MOYENNE
 
-#### 1. Workflow 04: Fundamental Data Collector 📊
+#### 1. Workflow 06: Fundamental Analysis (Scores) 📊
 **Statut**: 📋 À faire
-**Durée estimée**: 5h
+**Durée estimée**: 4h
 
-**Objectif**: Collecter données fondamentales (P/E, P/B, ROE, dividendes)
+**Objectif**: Calculer scores fondamentaux à partir des données du Workflow 04
 
-**Sources possibles**:
-- Yahoo Finance (gratuit, mais limité)
-- Financial Modeling Prep (gratuit: 250 req/jour)
-- Alpha Vantage (déjà écarté pour les indicateurs techniques)
+**Scores à calculer**:
+- Score Value (valorisation): P/E, P/B, P/S, PEG vs secteur
+- Score Growth (croissance): CA, bénéfices
+- Score Quality (qualité): ROE, marge, dette
+- Score Dividende: rendement, payout ratio
+- **Score Global Fondamental** (0-100): combinaison pondérée
 
-**Fréquence**: Hebdomadaire (données fondamentales changent lentement)
+**Fréquence**: Hebdomadaire (après Workflow 04)
+
+**Dépendances**: Workflow 04 (données fondamentales)
 
 ---
 
@@ -168,12 +184,15 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 - [x] Protection SQL injection (native insert operation)
 - [x] Documentation complète
 
-### Workflow 3 : Collecte des données fondamentales
-- [ ] Créer `03-fundamental-data-collector.json`
-- [ ] Récupérer ratios financiers (P/E, P/B, ROE)
-- [ ] Récupérer données dividendes
-- [ ] Mise à jour hebdomadaire
-- [ ] Validation des données
+### ✅ Workflow 4 : Collecte des données fondamentales (COMPLÉTÉ)
+- [x] Créer `04-fundamental-data-collector.json`
+- [x] Récupérer ratios financiers (P/E, P/B, ROE, P/S, PEG)
+- [x] Récupérer données dividendes (yield, per share, payout ratio)
+- [x] Récupérer croissance (revenue, earnings)
+- [x] Récupérer dette et liquidité (debt/equity, current ratio)
+- [x] Mise à jour hebdomadaire (dimanche 10h)
+- [x] Gestion valeurs NULL
+- [x] Documentation complète
 
 ---
 
@@ -417,13 +436,14 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 **Version** : 1.4
 **Statut** : 🚧 En construction active
 
-**Progression**: 5/17 workflows complétés (29%)
+**Progression**: 6/17 workflows complétés (35%)
 - ✅ Workflow 00: Historical Data Loader (avec adjusted_close fix)
 - ✅ Workflow 01: Daily Market Data Collector (avec timezone)
 - ✅ Workflow 02: News Collector (avec timezone)
 - ✅ Workflow 03: Technical Indicators Calculator (avec timezone)
+- ✅ Workflow 04: Fundamental Data Collector (Yahoo Finance quoteSummary)
 - ✅ Workflow 08: AI News Sentiment Analyzer (Ollama + Llama3.2)
-- 🔜 Workflow 04: Fundamental Data Collector (PRIORITÉ MOYENNE)
+- 🔜 Workflow 06: Fundamental Analysis Scores (PRIORITÉ MOYENNE)
 
 **Améliorations Infrastructure**:
 - ✅ Timezone standardisé (Europe/Paris) sur tous les workflows

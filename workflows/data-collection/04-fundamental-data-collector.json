@@ -1,0 +1,186 @@
+{
+  "name": "04-fundamental-data-collector",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * 0"
+            }
+          ]
+        },
+        "timezone": "Europe/Paris"
+      },
+      "id": "schedule-trigger",
+      "name": "Déclencheur Hebdomadaire",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, ticker, name FROM stocks WHERE is_pea_eligible = true AND is_active = true ORDER BY ticker;",
+        "options": {}
+      },
+      "id": "get-stocks",
+      "name": "Récupérer les actions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://query1.finance.yahoo.com/v10/finance/quoteSummary/{{ $json.ticker }}?modules=defaultKeyStatistics,financialData,summaryDetail",
+        "options": {
+          "timeout": 10000,
+          "batchSize": 1,
+          "batchInterval": 2000
+        }
+      },
+      "id": "fetch-yahoo",
+      "name": "Yahoo Finance API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-data",
+      "name": "Combiner données",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "python",
+        "pythonCode": "from datetime import datetime\nfrom zoneinfo import ZoneInfo\n\n# Récupérer les données combinées depuis le Merge\n# IMPORTANT: Utiliser _item (avec underscore) en Python n8n\nmerged_data = _item['json']\n\n# Extraire les données du stock (venant de PostgreSQL)\nstock_info = {\n    'id': merged_data.get('id'),\n    'ticker': merged_data.get('ticker'),\n    'name': merged_data.get('name')\n}\n\n# Les données Yahoo Finance sont aussi dans merged_data\nyahoo_response = merged_data\n\ntry:\n    # Vérifier si on a les données Yahoo Finance\n    if yahoo_response.get('quoteSummary') and yahoo_response['quoteSummary'].get('result') and len(yahoo_response['quoteSummary']['result']) > 0:\n        result = yahoo_response['quoteSummary']['result'][0]\n        \n        # Extraire les modules\n        default_stats = result.get('defaultKeyStatistics', {})\n        financial_data = result.get('financialData', {})\n        summary_detail = result.get('summaryDetail', {})\n        \n        # Fonction helper pour extraire les valeurs\n        def get_value(data, default=None):\n            if data and isinstance(data, dict) and 'raw' in data:\n                return data['raw']\n            return default\n        \n        # Date actuelle (timezone Europe/Paris)\n        date = datetime.now(ZoneInfo('Europe/Paris')).strftime('%Y-%m-%d')\n        \n        # Construire l'objet de données fondamentales\n        fundamentals = {\n            'stock_id': stock_info['id'],\n            'ticker': stock_info['ticker'],\n            'name': stock_info['name'],\n            'date': date,\n            \n            # Ratios de valorisation\n            'pe_ratio': get_value(summary_detail.get('trailingPE')),\n            'pb_ratio': get_value(default_stats.get('priceToBook')),\n            'ps_ratio': get_value(summary_detail.get('priceToSalesTrailing12Months')),\n            'peg_ratio': get_value(default_stats.get('pegRatio')),\n            \n            # Rentabilité\n            'roe': get_value(financial_data.get('returnOnEquity')),\n            'roa': get_value(financial_data.get('returnOnAssets')),\n            'profit_margin': get_value(financial_data.get('profitMargins')),\n            \n            # Dividendes\n            'dividend_yield': get_value(summary_detail.get('dividendYield')),\n            'dividend_per_share': get_value(summary_detail.get('dividendRate')),\n            'payout_ratio': get_value(summary_detail.get('payoutRatio')),\n            \n            # Croissance\n            'revenue_growth': get_value(financial_data.get('revenueGrowth')),\n            'earnings_growth': get_value(financial_data.get('earningsGrowth')),\n            \n            # Dette\n            'debt_to_equity': get_value(financial_data.get('debtToEquity')),\n            'current_ratio': get_value(financial_data.get('currentRatio')),\n            \n            # Autres\n            'beta': get_value(default_stats.get('beta')),\n            'analyst_rating': get_value(financial_data.get('recommendationKey')),\n            \n            'success': True\n        }\n        \n        # Convertir les pourcentages (comme ROE, ROA) de décimal à pourcentage si nécessaire\n        # Yahoo Finance retourne certaines valeurs en décimal (0.15 = 15%)\n        percentage_fields = ['roe', 'roa', 'profit_margin', 'dividend_yield', 'revenue_growth', 'earnings_growth']\n        for field in percentage_fields:\n            if fundamentals.get(field) is not None:\n                fundamentals[field] = round(fundamentals[field] * 100, 2)\n        \n        return {'json': fundamentals}\n    else:\n        return {\n            'json': {\n                'stock_id': stock_info['id'],\n                'ticker': stock_info['ticker'],\n                'name': stock_info['name'],\n                'success': False,\n                'error': 'No data in response'\n            }\n        }\nexcept Exception as error:\n    return {\n        'json': {\n            'stock_id': stock_info.get('id') if 'stock_info' in locals() else None,\n            'ticker': stock_info.get('ticker', 'error') if 'stock_info' in locals() else 'error',\n            'name': stock_info.get('name', 'error') if 'stock_info' in locals() else 'error',\n            'success': False,\n            'error': str(error)\n        }\n    }"
+      },
+      "id": "parse-response",
+      "name": "Parser réponse Python",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-success",
+      "name": "Filtrer succès",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO stock_fundamentals (\n  stock_id, date,\n  pe_ratio, pb_ratio, ps_ratio, peg_ratio,\n  roe, roa, profit_margin,\n  dividend_yield, dividend_per_share, payout_ratio,\n  revenue_growth, earnings_growth,\n  debt_to_equity, current_ratio,\n  beta, analyst_rating,\n  created_at\n)\nVALUES (\n  {{ $json.stock_id }},\n  '{{ $json.date }}',\n  {{ $json.pe_ratio || 'NULL' }},\n  {{ $json.pb_ratio || 'NULL' }},\n  {{ $json.ps_ratio || 'NULL' }},\n  {{ $json.peg_ratio || 'NULL' }},\n  {{ $json.roe || 'NULL' }},\n  {{ $json.roa || 'NULL' }},\n  {{ $json.profit_margin || 'NULL' }},\n  {{ $json.dividend_yield || 'NULL' }},\n  {{ $json.dividend_per_share || 'NULL' }},\n  {{ $json.payout_ratio || 'NULL' }},\n  {{ $json.revenue_growth || 'NULL' }},\n  {{ $json.earnings_growth || 'NULL' }},\n  {{ $json.debt_to_equity || 'NULL' }},\n  {{ $json.current_ratio || 'NULL' }},\n  {{ $json.beta || 'NULL' }},\n  {{ $json.analyst_rating ? \"'\" + $json.analyst_rating + \"'\" : 'NULL' }},\n  CURRENT_TIMESTAMP\n)\nON CONFLICT (stock_id, date) \nDO UPDATE SET\n  pe_ratio = EXCLUDED.pe_ratio,\n  pb_ratio = EXCLUDED.pb_ratio,\n  ps_ratio = EXCLUDED.ps_ratio,\n  peg_ratio = EXCLUDED.peg_ratio,\n  roe = EXCLUDED.roe,\n  roa = EXCLUDED.roa,\n  profit_margin = EXCLUDED.profit_margin,\n  dividend_yield = EXCLUDED.dividend_yield,\n  dividend_per_share = EXCLUDED.dividend_per_share,\n  payout_ratio = EXCLUDED.payout_ratio,\n  revenue_growth = EXCLUDED.revenue_growth,\n  earnings_growth = EXCLUDED.earnings_growth,\n  debt_to_equity = EXCLUDED.debt_to_equity,\n  current_ratio = EXCLUDED.current_ratio,\n  beta = EXCLUDED.beta,\n  analyst_rating = EXCLUDED.analyst_rating,\n  created_at = CURRENT_TIMESTAMP\nRETURNING stock_id, date, pe_ratio, roe;",
+        "options": {}
+      },
+      "id": "insert-db",
+      "name": "Insérer en BDD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO system_logs (workflow_name, level, message, details, created_at)\nVALUES (\n  'fundamental-data-collector',\n  'info',\n  'Données fondamentales collectées pour {{ $json.ticker }}',\n  jsonb_build_object(\n    'stock_id', {{ $json.stock_id }},\n    'date', '{{ $json.date }}',\n    'pe_ratio', {{ $json.pe_ratio || 'NULL' }},\n    'roe', {{ $json.roe || 'NULL' }}\n  ),\n  CURRENT_TIMESTAMP\n);",
+        "options": {}
+      },
+      "id": "log-success",
+      "name": "Log succès",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1780, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Déclencheur Hebdomadaire": {
+      "main": [[{"node": "Récupérer les actions", "type": "main", "index": 0}]]
+    },
+    "Récupérer les actions": {
+      "main": [
+        [
+          {"node": "Yahoo Finance API", "type": "main", "index": 0},
+          {"node": "Combiner données", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Yahoo Finance API": {
+      "main": [[{"node": "Combiner données", "type": "main", "index": 1}]]
+    },
+    "Combiner données": {
+      "main": [[{"node": "Parser réponse Python", "type": "main", "index": 0}]]
+    },
+    "Parser réponse Python": {
+      "main": [[{"node": "Filtrer succès", "type": "main", "index": 0}]]
+    },
+    "Filtrer succès": {
+      "main": [[{"node": "Insérer en BDD", "type": "main", "index": 0}]]
+    },
+    "Insérer en BDD": {
+      "main": [[{"node": "Log succès", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {"id": "1", "name": "PEA Advisor"},
+    {"id": "2", "name": "Data Collection"}
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-04T00:00:00.000Z",
+  "versionId": "1.0"
+}
