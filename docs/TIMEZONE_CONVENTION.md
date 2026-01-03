@@ -85,6 +85,33 @@ INSERT INTO table (created_at) VALUES (CURRENT_TIMESTAMP);
 -- CURRENT_TIMESTAMP utilisera automatiquement Europe/Paris
 ```
 
+**Utiliser TIMESTAMPTZ au lieu de TIMESTAMP** :
+
+```sql
+-- ✅ CORRECT - TIMESTAMPTZ (WITH TIME ZONE)
+CREATE TABLE example (
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ❌ INCORRECT - TIMESTAMP (WITHOUT TIME ZONE)
+CREATE TABLE example (
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Migration pour convertir TIMESTAMP → TIMESTAMPTZ** :
+
+Si vous avez des colonnes TIMESTAMP existantes, utilisez :
+```sql
+-- Convertir une colonne TIMESTAMP en TIMESTAMPTZ
+ALTER TABLE table_name
+ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'Europe/Paris';
+```
+
+Voir : `database/migrations/002_add_timezone_to_timestamps.sql`
+
 ---
 
 ## 📝 Checklist pour Nouveaux Workflows

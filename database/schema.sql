@@ -6,6 +6,9 @@
 -- CREATE DATABASE pea_advisor;
 -- Puis se connecter : \c pea_advisor ou exécuter avec -d pea_advisor
 
+-- Configurer le timezone Europe/Paris pour toute la base de données
+ALTER DATABASE pea_advisor SET timezone TO 'Europe/Paris';
+
 -- ============================================
 -- Table: Actions et référentiel
 -- ============================================
@@ -22,8 +25,8 @@ CREATE TABLE IF NOT EXISTS stocks (
     market_cap BIGINT,
     is_pea_eligible BOOLEAN DEFAULT true,
     is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_stocks_ticker ON stocks(ticker);
@@ -44,7 +47,7 @@ CREATE TABLE IF NOT EXISTS stock_prices (
     close DECIMAL(10, 2) NOT NULL,
     volume BIGINT,
     adjusted_close DECIMAL(10, 2),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(stock_id, date)
 );
 
@@ -88,7 +91,7 @@ CREATE TABLE IF NOT EXISTS stock_fundamentals (
     beta DECIMAL(10, 4),
     analyst_rating VARCHAR(20),
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(stock_id, date)
 );
 
@@ -131,8 +134,8 @@ CREATE TABLE IF NOT EXISTS technical_indicators (
     trend_signal VARCHAR(20),   -- 'bullish', 'bearish', 'neutral'
     macd_signal_str VARCHAR(20), -- 'bullish', 'bearish', 'neutral' (renamed to avoid conflict with macd_signal value)
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(stock_id, date)
 );
 
@@ -151,7 +154,7 @@ CREATE TABLE IF NOT EXISTS news (
     content TEXT,
     url TEXT UNIQUE,
     source VARCHAR(100),
-    published_at TIMESTAMP NOT NULL,
+    published_at TIMESTAMPTZ NOT NULL,
 
     -- Analyse de sentiment (rempli par IA)
     sentiment_score DECIMAL(5, 2), -- -10 à +10
@@ -164,7 +167,7 @@ CREATE TABLE IF NOT EXISTS news (
     ai_summary TEXT,
     ai_key_points JSONB,
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_news_stock_published ON news(stock_id, published_at DESC);
@@ -201,10 +204,10 @@ CREATE TABLE IF NOT EXISTS trading_signals (
 
     -- Suivi
     is_active BOOLEAN DEFAULT true,
-    triggered_at TIMESTAMP,
+    triggered_at TIMESTAMPTZ,
     outcome VARCHAR(20), -- success, failure, pending
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_trading_signals_stock_date ON trading_signals(stock_id, date DESC);
@@ -231,8 +234,8 @@ CREATE TABLE IF NOT EXISTS portfolio (
     unrealized_pnl_percentage DECIMAL(10, 2),
 
     -- Dates
-    opened_at TIMESTAMP NOT NULL,
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    opened_at TIMESTAMPTZ NOT NULL,
+    last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 
     -- Statut
     is_open BOOLEAN DEFAULT true
@@ -264,7 +267,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     notes TEXT,
 
     -- Date
-    executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    executed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 
     -- Pour le tracking fiscal PEA
     tax_year INTEGER,
@@ -304,7 +307,7 @@ CREATE TABLE IF NOT EXISTS portfolio_performance (
     beta DECIMAL(10, 4),
     max_drawdown DECIMAL(10, 4),
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_portfolio_performance_date ON portfolio_performance(date DESC);
@@ -338,7 +341,7 @@ CREATE TABLE IF NOT EXISTS ai_recommendations (
     model_used VARCHAR(50),
     prompt_version VARCHAR(20),
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_ai_recommendations_stock_date ON ai_recommendations(stock_id, date DESC);
@@ -364,10 +367,10 @@ CREATE TABLE IF NOT EXISTS reports (
     alerts JSONB,
 
     -- Distribution
-    sent_at TIMESTAMP,
+    sent_at TIMESTAMPTZ,
     recipients JSONB,
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_reports_type_date ON reports(type, date DESC);
@@ -397,10 +400,10 @@ CREATE TABLE IF NOT EXISTS alerts (
     is_dismissed BOOLEAN DEFAULT false,
 
     -- Notification
-    notified_at TIMESTAMP,
+    notified_at TIMESTAMPTZ,
     notification_channels JSONB, -- telegram, email, etc.
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_alerts_stock ON alerts(stock_id);
@@ -426,8 +429,8 @@ CREATE TABLE IF NOT EXISTS watchlist (
     -- Priorité
     priority INTEGER DEFAULT 5, -- 1-10
 
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_checked TIMESTAMP
+    added_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    last_checked TIMESTAMPTZ
 );
 
 CREATE INDEX idx_watchlist_priority ON watchlist(priority DESC);
@@ -443,7 +446,7 @@ CREATE TABLE IF NOT EXISTS system_logs (
     level VARCHAR(20), -- debug, info, warning, error
     message TEXT,
     details JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_system_logs_workflow ON system_logs(workflow_name);
