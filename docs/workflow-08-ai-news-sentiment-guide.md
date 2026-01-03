@@ -21,23 +21,30 @@ Analyser le sentiment (positif/négatif/neutre) et l'impact potentiel de chaque 
 
 ## 🏗️ Architecture
 
-### Nodes du Workflow (6 nodes)
+### Nodes du Workflow (8 nodes - LangChain)
 
 ```
 1. Déclencheur Quotidien 20h (Schedule Trigger)
    ↓
 2. Récupérer news non analysées (PostgreSQL)
    ↓
-3. Appeler Llama3.2 (HTTP Request → Ollama)
+3. Préparer Prompt + Context (Set)
    ↓
-4. Parser Résultat Python (Code Python)
+4. AI Agent (LLM Chain) ← connecté à → Ollama Chat Model (Llama3.2)
    ↓
-5. Filtrer succès (Filter)
+5. Parser Résultat Python (Code Python)
    ↓
-6. Mettre à jour news (PostgreSQL)
+6. Filtrer succès (Filter)
    ↓
-7. Log succès (PostgreSQL)
+7. Mettre à jour news (PostgreSQL)
+   ↓
+8. Log succès (PostgreSQL)
 ```
+
+**Architecture LangChain** :
+- **Ollama Chat Model** : Node de modèle de langage (se connecte via `ai_languageModel`)
+- **AI Agent** : LLM Chain qui reçoit le prompt et utilise le modèle Ollama
+- Connexion spéciale : Ollama Chat Model → (ai_languageModel) → AI Agent
 
 ---
 
@@ -61,24 +68,46 @@ services:
 **URL interne** : `http://ollama:11434`
 **Modèle** : `llama3.2` (auto-pulled au démarrage)
 
-### 2. HTTP Request vers Ollama
+### 2. Node "Préparer Prompt + Context" (Set)
 
-**Endpoint** : `POST http://ollama:11434/api/generate`
+**Type** : `n8n-nodes-base.set`
 
-**Body** :
+Ce node prépare trois variables pour l'AI Agent :
+- `prompt_text` : Le prompt complet avec les données de la news
+- `news_id` : L'ID de la news pour mise à jour ultérieure
+- `stock_id` : L'ID de l'action associée
+
+### 3. Node "Ollama Chat Model" (LangChain)
+
+**Type** : `@n8n/n8n-nodes-langchain.lmChatOllama`
+
+Configuration :
 ```json
 {
   "model": "llama3.2",
-  "prompt": "Analyse le sentiment...",
-  "stream": false,
   "options": {
     "temperature": 0.3,
-    "num_predict": 500
+    "maxTokens": 500
   }
 }
 ```
 
-### 3. Prompt Engineering
+**Credentials** : `ollamaApi` (pointe vers `http://ollama:11434`)
+
+### 4. Node "AI Agent" (LLM Chain)
+
+**Type** : `@n8n/n8n-nodes-langchain.chainLlm`
+
+Configuration :
+```json
+{
+  "text": "={{ $json.prompt_text }}"
+}
+```
+
+**Connexion** : Reçoit le modèle via connexion `ai_languageModel` depuis "Ollama Chat Model"
+
+### 5. Prompt Engineering
 
 Le prompt demande à Llama de retourner un JSON structuré :
 

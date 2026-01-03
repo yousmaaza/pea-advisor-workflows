@@ -39,44 +39,78 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://ollama:11434/api/generate",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
+        "assignments": {
+          "assignments": [
             {
-              "name": "Content-Type",
-              "value": "application/json"
+              "id": "prompt_text",
+              "name": "prompt_text",
+              "value": "={{ \"Tu es un analyste financier expert. Analyse le sentiment de cet article financier et retourne UNIQUEMENT un JSON valide sans texte supplémentaire ni markdown.\\n\\nTitre: \" + $json.title + \"\\n\\nDescription: \" + ($json.description || 'N/A') + \"\\n\\nContenu: \" + (($json.content || 'N/A').substring(0, 1000)) + \"\\n\\nRetourne UNIQUEMENT ce JSON (sans ```json, sans explication) :\\n{\\n  \\\"sentiment_score\\\": [nombre entre -10 et +10],\\n  \\\"sentiment_label\\\": \\\"negative\\\" ou \\\"neutral\\\" ou \\\"positive\\\",\\n  \\\"impact_score\\\": [nombre entre 0 et 10],\\n  \\\"ai_summary\\\": \\\"résumé en 2-3 phrases maximum\\\",\\n  \\\"ai_key_points\\\": [\\\"point 1\\\", \\\"point 2\\\", \\\"point 3\\\"]\\n}\" }}",
+              "type": "string"
+            },
+            {
+              "id": "news_id",
+              "name": "news_id",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "stock_id",
+              "name": "stock_id",
+              "value": "={{ $json.stock_id }}",
+              "type": "number"
             }
           ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": []
-        },
-        "jsonBody": "={{ JSON.stringify({\n  model: 'llama3.2',\n  prompt: 'Tu es un analyste financier expert. Analyse le sentiment de cet article financier et retourne UNIQUEMENT un JSON valide sans texte supplémentaire ni markdown.\\n\\nTitre: ' + $json.title + '\\n\\nDescription: ' + ($json.description || 'N/A') + '\\n\\nContenu: ' + (($json.content || 'N/A').substring(0, 1000)) + '\\n\\nRetourne UNIQUEMENT ce JSON (sans ```json, sans explication) :\\n{\\n  \"sentiment_score\": [nombre entre -10 et +10],\\n  \"sentiment_label\": \"negative\" ou \"neutral\" ou \"positive\",\\n  \"impact_score\": [nombre entre 0 et 10],\\n  \"ai_summary\": \"résumé en 2-3 phrases maximum\",\\n  \"ai_key_points\": [\"point 1\", \"point 2\", \"point 3\"]\\n}',\n  stream: false,\n  options: {\n    temperature: 0.3,\n    num_predict: 500\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "prepare-prompt",
+      "name": "Préparer Prompt + Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "model": "llama3.2",
         "options": {
-          "timeout": 60000
+          "temperature": 0.3,
+          "maxTokens": 500
         }
       },
-      "id": "call-ollama",
-      "name": "Appeler Llama3.2 (Ollama)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [680, 300]
+      "id": "ollama-chat-model",
+      "name": "Ollama Chat Model (Llama3.2)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [900, 400],
+      "credentials": {
+        "ollamaApi": {
+          "id": "ollama-local",
+          "name": "Ollama Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.prompt_text }}",
+        "options": {}
+      },
+      "id": "basic-llm-chain",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.3,
+      "position": [900, 300]
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "python",
-        "pythonCode": "import json\nimport re\nfrom zoneinfo import ZoneInfo\nfrom datetime import datetime\n\n# Timezone Europe/Paris\nparis_tz = ZoneInfo('Europe/Paris')\n\n# Récupérer la réponse Ollama et les données de la news\nollama_data = _item['json']\nresponse_text = ollama_data.get('response', '')\n\n# Récupérer les données de la news depuis les items précédents\n# Note: Ollama retourne dans 'response', on doit merger avec les données initiales\ntry:\n    # Parser le contexte initial si disponible\n    news_id = _item['json'].get('id')\n    stock_id = _item['json'].get('stock_id')\n    \n    if not news_id:\n        # Si pas d'id dans l'item actuel, essayer de le récupérer du contexte\n        # Dans n8n, on peut accéder aux données précédentes\n        raise Exception('news_id not found in item')\n    \n    # Nettoyer la réponse (enlever markdown si présent)\n    cleaned_response = response_text.strip()\n    \n    # Enlever les balises markdown ```json ... ``` si présentes\n    if '```json' in cleaned_response:\n        match = re.search(r'```json\\s*({.*?})\\s*```', cleaned_response, re.DOTALL)\n        if match:\n            cleaned_response = match.group(1)\n    elif '```' in cleaned_response:\n        match = re.search(r'```\\s*({.*?})\\s*```', cleaned_response, re.DOTALL)\n        if match:\n            cleaned_response = match.group(1)\n    \n    # Extraire le JSON s'il est entouré de texte\n    json_match = re.search(r'{[^{}]*(?:{[^{}]*}[^{}]*)*}', cleaned_response, re.DOTALL)\n    if json_match:\n        cleaned_response = json_match.group(0)\n    \n    # Parser le JSON\n    sentiment_data = json.loads(cleaned_response)\n    \n    # Valider et normaliser les données\n    sentiment_score = float(sentiment_data.get('sentiment_score', 0))\n    sentiment_score = max(-10, min(10, sentiment_score))  # Clamp entre -10 et 10\n    \n    impact_score = float(sentiment_data.get('impact_score', 0))\n    impact_score = max(0, min(10, impact_score))  # Clamp entre 0 et 10\n    \n    sentiment_label = str(sentiment_data.get('sentiment_label', 'neutral')).lower()\n    if sentiment_label not in ['negative', 'neutral', 'positive']:\n        # Déduire le label du score si invalide\n        if sentiment_score < -2:\n            sentiment_label = 'negative'\n        elif sentiment_score > 2:\n            sentiment_label = 'positive'\n        else:\n            sentiment_label = 'neutral'\n    \n    ai_summary = sentiment_data.get('ai_summary', '')\n    ai_key_points = sentiment_data.get('ai_key_points', [])\n    \n    # Si ai_key_points n'est pas une liste, le convertir\n    if not isinstance(ai_key_points, list):\n        ai_key_points = [str(ai_key_points)]\n    \n    # Limiter la taille\n    ai_summary_clean = (ai_summary[:500] if ai_summary else None)\n    ai_key_points_clean = ai_key_points[:5] if ai_key_points else []\n    \n    return {\n        'json': {\n            'news_id': news_id,\n            'stock_id': stock_id,\n            'sentiment_score': round(sentiment_score, 2),\n            'sentiment_label': sentiment_label,\n            'impact_score': round(impact_score, 2),\n            'ai_summary': ai_summary_clean,\n            'ai_key_points': json.dumps(ai_key_points_clean, ensure_ascii=False),\n            'analyzed_at': datetime.now(paris_tz).isoformat(),\n            'success': True\n        }\n    }\n\nexcept Exception as error:\n    # En cas d'erreur, retourner des valeurs neutres avec log d'erreur\n    return {\n        'json': {\n            'news_id': _item['json'].get('id', 0),\n            'stock_id': _item['json'].get('stock_id', 0),\n            'sentiment_score': 0,\n            'sentiment_label': 'neutral',\n            'impact_score': 0,\n            'ai_summary': None,\n            'ai_key_points': None,\n            'success': False,\n            'error': str(error),\n            'raw_response': response_text[:300] if response_text else 'No response'\n        }\n    }"
+        "pythonCode": "import json\nimport re\nfrom zoneinfo import ZoneInfo\nfrom datetime import datetime\n\n# Timezone Europe/Paris\nparis_tz = ZoneInfo('Europe/Paris')\n\n# Récupérer la réponse de l'AI Agent et le contexte\nai_response = _item['json'].get('response', '') or _item['json'].get('output', '') or _item['json'].get('text', '')\nnews_id = _item['json'].get('news_id')\nstock_id = _item['json'].get('stock_id')\n\ntry:\n    # Nettoyer la réponse (enlever markdown si présent)\n    cleaned_response = ai_response.strip()\n    \n    # Enlever les balises markdown ```json ... ``` si présentes\n    if '```json' in cleaned_response:\n        match = re.search(r'```json\\s*({.*?})\\s*```', cleaned_response, re.DOTALL)\n        if match:\n            cleaned_response = match.group(1)\n    elif '```' in cleaned_response:\n        match = re.search(r'```\\s*({.*?})\\s*```', cleaned_response, re.DOTALL)\n        if match:\n            cleaned_response = match.group(1)\n    \n    # Extraire le JSON s'il est entouré de texte\n    json_match = re.search(r'{[^{}]*(?:{[^{}]*}[^{}]*)*}', cleaned_response, re.DOTALL)\n    if json_match:\n        cleaned_response = json_match.group(0)\n    \n    # Parser le JSON\n    sentiment_data = json.loads(cleaned_response)\n    \n    # Valider et normaliser les données\n    sentiment_score = float(sentiment_data.get('sentiment_score', 0))\n    sentiment_score = max(-10, min(10, sentiment_score))  # Clamp entre -10 et +10\n    \n    impact_score = float(sentiment_data.get('impact_score', 0))\n    impact_score = max(0, min(10, impact_score))  # Clamp entre 0 et 10\n    \n    sentiment_label = str(sentiment_data.get('sentiment_label', 'neutral')).lower()\n    if sentiment_label not in ['negative', 'neutral', 'positive']:\n        # Déduire le label du score si invalide\n        if sentiment_score < -2:\n            sentiment_label = 'negative'\n        elif sentiment_score > 2:\n            sentiment_label = 'positive'\n        else:\n            sentiment_label = 'neutral'\n    \n    ai_summary = sentiment_data.get('ai_summary', '')\n    ai_key_points = sentiment_data.get('ai_key_points', [])\n    \n    # Si ai_key_points n'est pas une liste, le convertir\n    if not isinstance(ai_key_points, list):\n        ai_key_points = [str(ai_key_points)]\n    \n    # Limiter la taille\n    ai_summary_clean = (ai_summary[:500] if ai_summary else None)\n    ai_key_points_clean = ai_key_points[:5] if ai_key_points else []\n    \n    return {\n        'json': {\n            'news_id': news_id,\n            'stock_id': stock_id,\n            'sentiment_score': round(sentiment_score, 2),\n            'sentiment_label': sentiment_label,\n            'impact_score': round(impact_score, 2),\n            'ai_summary': ai_summary_clean,\n            'ai_key_points': json.dumps(ai_key_points_clean, ensure_ascii=False),\n            'analyzed_at': datetime.now(paris_tz).isoformat(),\n            'success': True\n        }\n    }\n\nexcept Exception as error:\n    # En cas d'erreur, retourner des valeurs neutres avec log d'erreur\n    return {\n        'json': {\n            'news_id': news_id or 0,\n            'stock_id': stock_id or 0,\n            'sentiment_score': 0,\n            'sentiment_label': 'neutral',\n            'impact_score': 0,\n            'ai_summary': None,\n            'ai_key_points': None,\n            'success': False,\n            'error': str(error),\n            'raw_response': ai_response[:300] if ai_response else 'No response'\n        }\n    }"
       },
       "id": "parse-sentiment",
       "name": "Parser Résultat Python",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [1120, 300]
     },
     {
       "parameters": {
@@ -104,7 +138,7 @@
       "name": "Filtrer succès",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [1340, 300]
     },
     {
       "parameters": {
@@ -116,7 +150,7 @@
       "name": "Mettre à jour news",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1340, 300],
+      "position": [1560, 300],
       "credentials": {
         "postgres": {
           "id": "1",
@@ -145,7 +179,7 @@
       "name": "Log succès",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1560, 300],
+      "position": [1780, 300],
       "credentials": {
         "postgres": {
           "id": "1",
@@ -159,9 +193,15 @@
       "main": [[{"node": "Récupérer news non analysées", "type": "main", "index": 0}]]
     },
     "Récupérer news non analysées": {
-      "main": [[{"node": "Appeler Llama3.2 (Ollama)", "type": "main", "index": 0}]]
+      "main": [[{"node": "Préparer Prompt + Context", "type": "main", "index": 0}]]
     },
-    "Appeler Llama3.2 (Ollama)": {
+    "Préparer Prompt + Context": {
+      "main": [[{"node": "AI Agent", "type": "main", "index": 0}]]
+    },
+    "Ollama Chat Model (Llama3.2)": {
+      "ai_languageModel": [[{"node": "AI Agent", "type": "ai_languageModel", "index": 0}]]
+    },
+    "AI Agent": {
       "main": [[{"node": "Parser Résultat Python", "type": "main", "index": 0}]]
     },
     "Parser Résultat Python": {
@@ -187,6 +227,6 @@
     {"id": "4", "name": "News"}
   ],
   "triggerCount": 1,
-  "updatedAt": "2026-01-03T20:00:00.000Z",
-  "versionId": "1.0"
+  "updatedAt": "2026-01-03T21:00:00.000Z",
+  "versionId": "2.0"
 }
