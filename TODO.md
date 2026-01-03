@@ -122,8 +122,8 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 - [x] Créer la structure de dossiers
 - [x] Configurer les variables d'environnement (.env)
 - [x] Documenter les API keys nécessaires (guide complet créé)
-- [ ] Créer le schéma de base de données PostgreSQL
-- [ ] Initialiser les tables de données
+- [x] Créer le schéma de base de données PostgreSQL
+- [x] Initialiser les tables de données
 
 ### 🔌 Connexions API à configurer
 - [x] Yahoo Finance API (gratuit) - Utilisé dans workflows 00, 01
