@@ -138,8 +138,19 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "=INSERT INTO system_logs (workflow_name, level, message, details, created_at)\nVALUES (\n  'news-collector',\n  'info',\n  'News collectée pour {{ $json.stock_ticker }}',\n  jsonb_build_object(\n    'stock_id', {{ $json.stock_id }},\n    'title', '{{ $json.title.replace(\"'\", \"''\") }}',\n    'source', '{{ $json.source }}'\n  ),\n  CURRENT_TIMESTAMP\n);",
+        "operation": "insert",
+        "schema": "public",
+        "table": "system_logs",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_name": "news-collector",
+            "level": "info",
+            "message": "={{ 'News collectée pour ' + $json.stock_ticker }}",
+            "details": "={{ { stock_id: $json.stock_id, title: $json.title, source: $json.source } }}",
+            "created_at": "={{ $now }}"
+          }
+        },
         "options": {}
       },
       "id": "log-success",
