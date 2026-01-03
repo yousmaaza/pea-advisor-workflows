@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS technical_indicators (
     id SERIAL PRIMARY KEY,
     stock_id INTEGER REFERENCES stocks(id) ON DELETE CASCADE,
     date DATE NOT NULL,
+    close_price DECIMAL(10, 4),
 
     -- RSI
     rsi_14 DECIMAL(10, 2),
@@ -112,27 +113,31 @@ CREATE TABLE IF NOT EXISTS technical_indicators (
     macd_histogram DECIMAL(10, 4),
 
     -- Moyennes mobiles
-    sma_20 DECIMAL(10, 2),
-    sma_50 DECIMAL(10, 2),
-    sma_200 DECIMAL(10, 2),
-    ema_20 DECIMAL(10, 2),
+    sma_20 DECIMAL(10, 4),
+    sma_50 DECIMAL(10, 4),
+    sma_200 DECIMAL(10, 4),
+    ema_20 DECIMAL(10, 4),
 
     -- Bandes de Bollinger
-    bb_upper DECIMAL(10, 2),
-    bb_middle DECIMAL(10, 2),
-    bb_lower DECIMAL(10, 2),
-
-    -- Volume
-    volume_sma_20 BIGINT,
+    bb_upper DECIMAL(10, 4),
+    bb_middle DECIMAL(10, 4),
+    bb_lower DECIMAL(10, 4),
 
     -- Volatilité
     atr_14 DECIMAL(10, 4),
 
+    -- Signaux de trading
+    rsi_signal VARCHAR(20),     -- 'oversold', 'overbought', 'neutral'
+    trend_signal VARCHAR(20),   -- 'bullish', 'bearish', 'neutral'
+    macd_signal_str VARCHAR(20), -- 'bullish', 'bearish', 'neutral' (renamed to avoid conflict with macd_signal value)
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(stock_id, date)
 );
 
 CREATE INDEX idx_technical_indicators_stock_date ON technical_indicators(stock_id, date DESC);
+CREATE INDEX idx_technical_indicators_signals ON technical_indicators(rsi_signal, trend_signal, macd_signal_str);
 
 -- ============================================
 -- Table: Actualités financières
