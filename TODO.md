@@ -277,6 +277,81 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 
 ## 📝 Notes & Idées
 
+### 🔥 Priorités - À Implémenter Prochainement
+
+#### Workflow 00: Historical Data Loader (CRITIQUE)
+**Statut**: 📋 À faire
+**Priorité**: 🔴 HAUTE
+
+**Objectif**: Charger l'historique initial des prix pour permettre le calcul des indicateurs techniques
+
+**Détails**:
+- Récupérer 250 jours d'historique via Yahoo Finance (range=1y)
+- Une seule requête par action (pas 250!)
+- Insérer en batch dans stock_prices
+- À lancer UNE SEULE FOIS au début
+- Durée: ~2 minutes pour 50 actions
+- Gratuit, illimité
+
+**Pourquoi c'est critique**:
+- Sans historique, impossible de calculer RSI (14 jours), MACD (26 jours), SMA 200 (200 jours)
+- Le workflow 01 actuel ne récupère que 1 jour
+- Doit être fait AVANT le workflow de calcul des indicateurs
+
+#### Workflow 02-bis: Technical Indicators Calculator (LOCAL)
+**Statut**: 📋 À faire
+**Priorité**: 🔴 HAUTE
+
+**Objectif**: Calculer TOUS les indicateurs techniques localement au lieu d'utiliser Alpha Vantage
+
+**Raisons d'abandonner Alpha Vantage**:
+- ❌ Rate limit: 1 req/seconde (trop lent)
+- ❌ Limite gratuite: 25 req/jour (insuffisant pour 50 actions)
+- ❌ Pour 50 actions × 5 indicateurs = 250 requêtes = 10 JOURS!
+- ❌ Version payante: $50/mois
+- ✅ **Alternative**: Calcul local avec TA-Lib/pandas-ta
+
+**Détails de l'implémentation**:
+```python
+# Bibliothèque: TA-Lib (Technical Analysis Library)
+import talib
+
+# Lecture depuis stock_prices (on a déjà les données!)
+prices = get_stock_prices(stock_id, last_250_days)
+
+# Calcul de TOUS les indicateurs en une passe
+rsi_14 = talib.RSI(prices['close'], timeperiod=14)
+macd, macd_signal, macd_hist = talib.MACD(prices['close'], 12, 26, 9)
+sma_20 = talib.SMA(prices['close'], timeperiod=20)
+sma_50 = talib.SMA(prices['close'], timeperiod=50)
+sma_200 = talib.SMA(prices['close'], timeperiod=200)
+ema_20 = talib.EMA(prices['close'], timeperiod=20)
+bb_upper, bb_middle, bb_lower = talib.BBANDS(prices['close'], 20, 2, 2)
+atr_14 = talib.ATR(prices['high'], prices['low'], prices['close'], 14)
+
+# Insertion en BDD
+INSERT INTO technical_indicators (stock_id, date, rsi_14, macd, ...)
+```
+
+**Avantages**:
+- ✅ 1000x plus rapide (5 secondes pour 50 actions vs 10 jours!)
+- ✅ Gratuit et illimité
+- ✅ Plus de contrôle sur les paramètres
+- ✅ Tous les indicateurs en une seule passe
+- ✅ Pas de dépendance externe
+
+**Architecture**:
+1. Trigger quotidien 19h (après workflow 01)
+2. SELECT prix depuis stock_prices (250 derniers jours)
+3. Calcul Python avec TA-Lib
+4. INSERT dans technical_indicators
+
+**Dépendances**:
+- Workflow 00 (historique) doit être exécuté d'abord
+- TA-Lib doit être installé dans n8n Python
+
+---
+
 ### Idées futures
 - Intégration avec compte Boursorama (lecture seule via scraping)
 - ML pour prédiction de tendances

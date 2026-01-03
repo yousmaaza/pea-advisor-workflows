@@ -1,0 +1,201 @@
+{
+  "name": "02-news-collector",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */4 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Déclencheur Toutes les 4h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, ticker, name FROM stocks WHERE is_pea_eligible = true AND is_active = true ORDER BY ticker;",
+        "options": {}
+      },
+      "id": "get-stocks",
+      "name": "Récupérer les actions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://newsapi.org/v2/everything?q={{ $json.name }}&language=fr&sortBy=publishedAt&pageSize=5&apiKey=VOTRE_CLE_API_ICI",
+        "options": {
+          "timeout": 15000,
+          "batchSize": 1,
+          "batchInterval": 2000
+        }
+      },
+      "id": "fetch-news",
+      "name": "NewsAPI Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-data",
+      "name": "Combiner données",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "python",
+        "pythonCode": "from datetime import datetime\n\nresults = []\n\n# Traiter chaque item (action + news)\nfor item in _items:\n    merged_data = item['json']\n    \n    # Extraire les données du stock\n    stock_info = {\n        'id': merged_data.get('id'),\n        'ticker': merged_data.get('ticker'),\n        'name': merged_data.get('name')\n    }\n    \n    # Les données NewsAPI sont aussi dans merged_data\n    news_response = merged_data\n    \n    try:\n        # Vérifier si on a des articles\n        if news_response.get('status') == 'ok' and news_response.get('articles'):\n            articles = news_response['articles']\n            \n            for article in articles:\n                # Convertir la date de publication\n                published_at = article.get('publishedAt', '')\n                if published_at:\n                    # Format: 2024-01-03T10:30:00Z\n                    published_date = datetime.strptime(published_at, '%Y-%m-%dT%H:%M:%SZ')\n                    published_str = published_date.strftime('%Y-%m-%d %H:%M:%S')\n                else:\n                    published_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')\n                \n                # Créer un item pour chaque article\n                article_data = {\n                    'stock_id': stock_info['id'],\n                    'stock_ticker': stock_info['ticker'],\n                    'stock_name': stock_info['name'],\n                    'title': article.get('title', 'No title'),\n                    'description': article.get('description', ''),\n                    'content': article.get('content', ''),\n                    'url': article.get('url', ''),\n                    'source': article.get('source', {}).get('name', 'Unknown'),\n                    'published_at': published_str,\n                    'success': True\n                }\n                results.append({'json': article_data})\n            \n            # Si aucun article trouvé pour cette action\n            if len(articles) == 0:\n                results.append({\n                    'json': {\n                        'stock_id': stock_info['id'],\n                        'stock_ticker': stock_info['ticker'],\n                        'stock_name': stock_info['name'],\n                        'success': False,\n                        'error': 'No articles found'\n                    }\n                })\n        else:\n            # API error ou rate limit\n            error_msg = news_response.get('message', 'Unknown error')\n            results.append({\n                'json': {\n                    'stock_id': stock_info['id'],\n                    'stock_ticker': stock_info['ticker'],\n                    'stock_name': stock_info['name'],\n                    'success': False,\n                    'error': error_msg\n                }\n            })\n    \n    except Exception as error:\n        results.append({\n            'json': {\n                'stock_id': stock_info.get('id', None),\n                'stock_ticker': stock_info.get('ticker', 'error'),\n                'stock_name': stock_info.get('name', 'error'),\n                'success': False,\n                'error': str(error)\n            }\n        })\n\nreturn results"
+      },
+      "id": "parse-news",
+      "name": "Parser News Python",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-success",
+      "name": "Filtrer succès",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "news",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "stock_id": "={{ $json.stock_id }}",
+            "title": "={{ $json.title }}",
+            "description": "={{ $json.description }}",
+            "content": "={{ $json.content }}",
+            "url": "={{ $json.url }}",
+            "source": "={{ $json.source }}",
+            "published_at": "={{ $json.published_at }}"
+          }
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      },
+      "id": "insert-db",
+      "name": "Insérer en BDD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO system_logs (workflow_name, level, message, details, created_at)\nVALUES (\n  'news-collector',\n  'info',\n  'News collectée pour {{ $json.stock_ticker }}',\n  jsonb_build_object(\n    'stock_id', {{ $json.stock_id }},\n    'title', '{{ $json.title.replace(\"'\", \"''\") }}',\n    'source', '{{ $json.source }}'\n  ),\n  CURRENT_TIMESTAMP\n);",
+        "options": {}
+      },
+      "id": "log-success",
+      "name": "Log succès",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1780, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Déclencheur Toutes les 4h": {
+      "main": [[{"node": "Récupérer les actions", "type": "main", "index": 0}]]
+    },
+    "Récupérer les actions": {
+      "main": [
+        [
+          {"node": "NewsAPI Request", "type": "main", "index": 0},
+          {"node": "Combiner données", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "NewsAPI Request": {
+      "main": [[{"node": "Combiner données", "type": "main", "index": 1}]]
+    },
+    "Combiner données": {
+      "main": [[{"node": "Parser News Python", "type": "main", "index": 0}]]
+    },
+    "Parser News Python": {
+      "main": [[{"node": "Filtrer succès", "type": "main", "index": 0}]]
+    },
+    "Filtrer succès": {
+      "main": [[{"node": "Insérer en BDD", "type": "main", "index": 0}]]
+    },
+    "Insérer en BDD": {
+      "main": [[{"node": "Log succès", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {"id": "1", "name": "PEA Advisor"},
+    {"id": "2", "name": "Data Collection"},
+    {"id": "4", "name": "News"}
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-03T12:00:00.000Z",
+  "versionId": "1.0"
+}

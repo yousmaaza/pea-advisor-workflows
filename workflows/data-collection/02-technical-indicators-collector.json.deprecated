@@ -1,0 +1,186 @@
+{
+  "name": "02-technical-indicators-collector",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 19 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Déclencheur Quotidien",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, ticker, name FROM stocks WHERE is_pea_eligible = true AND is_active = true ORDER BY ticker;",
+        "options": {}
+      },
+      "id": "get-stocks",
+      "name": "Récupérer les actions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://www.alphavantage.co/query?function=RSI&symbol={{ $json.ticker }}&interval=daily&time_period=14&apikey=VOTRE_CLE_API_ICI",
+        "options": {
+          "timeout": 15000,
+          "batchSize": 1,
+          "batchInterval": 3000
+        }
+      },
+      "id": "fetch-alpha-vantage-rsi",
+      "name": "Alpha Vantage RSI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-data",
+      "name": "Combiner données",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "python",
+        "pythonCode": "from datetime import datetime, timedelta\n\n# Récupérer les données combinées depuis le Merge\n# IMPORTANT: Utiliser _item (avec underscore) en Python n8n\nmerged_data = _item['json']\n\n# Extraire les données du stock (venant de PostgreSQL)\nstock_info = {\n    'id': merged_data.get('id'),\n    'ticker': merged_data.get('ticker'),\n    'name': merged_data.get('name')\n}\n\n# Les données Alpha Vantage sont aussi dans merged_data\nalpha_response = merged_data\n\ntry:\n    # Vérifier si on a les données Alpha Vantage RSI\n    if alpha_response.get('Technical Analysis: RSI'):\n        rsi_data = alpha_response['Technical Analysis: RSI']\n        \n        # Récupérer la date la plus récente\n        latest_date = max(rsi_data.keys())\n        latest_rsi = float(rsi_data[latest_date]['RSI'])\n        \n        # Convertir la date au format YYYY-MM-DD\n        date = datetime.strptime(latest_date, '%Y-%m-%d').strftime('%Y-%m-%d')\n        \n        return {\n            'json': {\n                'stock_id': stock_info['id'],\n                'ticker': stock_info['ticker'],\n                'name': stock_info['name'],\n                'date': date,\n                'rsi_14': latest_rsi,\n                'success': True\n            }\n        }\n    elif alpha_response.get('Note'):\n        # API rate limit atteint\n        return {\n            'json': {\n                'stock_id': stock_info['id'],\n                'ticker': stock_info['ticker'],\n                'name': stock_info['name'],\n                'success': False,\n                'error': 'API rate limit reached',\n                'note': alpha_response.get('Note')\n            }\n        }\n    else:\n        return {\n            'json': {\n                'stock_id': stock_info['id'],\n                'ticker': stock_info['ticker'],\n                'name': stock_info['name'],\n                'success': False,\n                'error': 'No RSI data in response'\n            }\n        }\nexcept Exception as error:\n    return {\n        'json': {\n            'stock_id': stock_info.get('id') if 'stock_info' in locals() else None,\n            'ticker': stock_info.get('ticker', 'error') if 'stock_info' in locals() else 'error',\n            'name': stock_info.get('name', 'error') if 'stock_info' in locals() else 'error',\n            'success': False,\n            'error': str(error)\n        }\n    }"
+      },
+      "id": "parse-response",
+      "name": "Parser RSI Python",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-success",
+      "name": "Filtrer succès",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO technical_indicators (stock_id, date, rsi_14, created_at)\nVALUES (\n  {{ $json.stock_id }},\n  '{{ $json.date }}',\n  {{ $json.rsi_14 }},\n  CURRENT_TIMESTAMP\n)\nON CONFLICT (stock_id, date) \nDO UPDATE SET\n  rsi_14 = EXCLUDED.rsi_14,\n  created_at = CURRENT_TIMESTAMP\nRETURNING stock_id, date, rsi_14;",
+        "options": {}
+      },
+      "id": "insert-db",
+      "name": "Insérer en BDD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO system_logs (workflow_name, level, message, details, created_at)\nVALUES (\n  'technical-indicators-collector',\n  'info',\n  'RSI collecté pour {{ $json.ticker }}',\n  jsonb_build_object(\n    'stock_id', {{ $json.stock_id }},\n    'date', '{{ $json.date }}',\n    'rsi_14', {{ $json.rsi_14 }}\n  ),\n  CURRENT_TIMESTAMP\n);",
+        "options": {}
+      },
+      "id": "log-success",
+      "name": "Log succès",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1780, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Déclencheur Quotidien": {
+      "main": [[{"node": "Récupérer les actions", "type": "main", "index": 0}]]
+    },
+    "Récupérer les actions": {
+      "main": [
+        [
+          {"node": "Alpha Vantage RSI", "type": "main", "index": 0},
+          {"node": "Combiner données", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Alpha Vantage RSI": {
+      "main": [[{"node": "Combiner données", "type": "main", "index": 1}]]
+    },
+    "Combiner données": {
+      "main": [[{"node": "Parser RSI Python", "type": "main", "index": 0}]]
+    },
+    "Parser RSI Python": {
+      "main": [[{"node": "Filtrer succès", "type": "main", "index": 0}]]
+    },
+    "Filtrer succès": {
+      "main": [[{"node": "Insérer en BDD", "type": "main", "index": 0}]]
+    },
+    "Insérer en BDD": {
+      "main": [[{"node": "Log succès", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {"id": "1", "name": "PEA Advisor"},
+    {"id": "2", "name": "Data Collection"},
+    {"id": "3", "name": "Technical Analysis"}
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-03T11:15:00.000Z",
+  "versionId": "1.0"
+}

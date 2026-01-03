@@ -169,7 +169,9 @@ n8n execute --id <workflow-id>
 - **Documentation principale**: `/docs/README.md`
 - **Démarrage rapide**: `/docs/QUICKSTART.md`
 - **Architecture**: `/docs/architecture.md`
-- **Guide workflow principal**: `/docs/workflow-01-guide.md`
+- **Workflow 01 - Prix de marché**: `/docs/workflow-01-guide.md`
+- **Workflow 02 - News Collector**: `/docs/workflow-02-news-collector-guide.md`
+- **Configuration API Keys n8n** 🔑: `/docs/n8n-api-keys-setup.md`
 - **Migration Python**: `/docs/python-migration-guide.md`
 - **Architecture Python + Merge**: `/docs/python-workflow-architecture.md`
 - **Variables Python n8n** ⭐: `/docs/python-variables-n8n.md` (Guide _item vs item)
