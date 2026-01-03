@@ -1,0 +1,159 @@
+{
+  "name": "03-technical-indicators-calculator",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "15 19 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Déclencheur Quotidien 19h15",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH stock_prices_agg AS (\n  SELECT\n    sp.stock_id,\n    array_agg(sp.date ORDER BY sp.date ASC) as dates,\n    array_agg(sp.open ORDER BY sp.date ASC) as opens,\n    array_agg(sp.high ORDER BY sp.date ASC) as highs,\n    array_agg(sp.low ORDER BY sp.date ASC) as lows,\n    array_agg(sp.close ORDER BY sp.date ASC) as closes,\n    array_agg(sp.volume ORDER BY sp.date ASC) as volumes,\n    MAX(sp.date) as latest_date,\n    COUNT(*) as data_points\n  FROM stock_prices sp\n  WHERE sp.date >= CURRENT_DATE - INTERVAL '300 days'\n  GROUP BY sp.stock_id\n  HAVING COUNT(*) >= 14\n)\nSELECT\n  s.id,\n  s.ticker,\n  s.name,\n  spa.dates,\n  spa.opens,\n  spa.highs,\n  spa.lows,\n  spa.closes,\n  spa.volumes,\n  spa.latest_date,\n  spa.data_points\nFROM stocks s\nJOIN stock_prices_agg spa ON spa.stock_id = s.id\nWHERE s.is_active = true AND s.is_pea_eligible = true\nORDER BY s.ticker;",
+        "options": {}
+      },
+      "id": "get-stocks-prices",
+      "name": "Récupérer prix agrégés",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "python",
+        "pythonCode": "from datetime import datetime\nimport math\n\n# Extraire les données du stock\nstock_id = _item['json']['id']\nticker = _item['json']['ticker']\nname = _item['json']['name']\nlatest_date = _item['json']['latest_date']\n\n# Arrays de prix\ncloses = _item['json']['closes']\nhighs = _item['json']['highs']\nlows = _item['json']['lows']\nopens = _item['json']['opens']\nvolumes = _item['json']['volumes']\n\ntry:\n    # Vérifier qu'on a assez de données\n    if len(closes) < 14:\n        return {\n            'json': {\n                'stock_id': stock_id,\n                'ticker': ticker,\n                'success': False,\n                'error': f'Insufficient data: {len(closes)} days (need 14 minimum)'\n            }\n        }\n    \n    # ============================================\n    # 1. RSI (Relative Strength Index) - 14 périodes\n    # ============================================\n    def calculate_rsi(prices, period=14):\n        if len(prices) < period + 1:\n            return None\n        \n        deltas = [prices[i] - prices[i-1] for i in range(1, len(prices))]\n        gains = [d if d > 0 else 0 for d in deltas]\n        losses = [-d if d < 0 else 0 for d in deltas]\n        \n        # Moyenne des gains et pertes\n        avg_gain = sum(gains[:period]) / period\n        avg_loss = sum(losses[:period]) / period\n        \n        # RS et RSI\n        if avg_loss == 0:\n            return 100.0\n        rs = avg_gain / avg_loss\n        rsi = 100 - (100 / (1 + rs))\n        \n        return round(rsi, 2)\n    \n    rsi_14 = calculate_rsi(closes, 14)\n    \n    # ============================================\n    # 2. SMA (Simple Moving Average)\n    # ============================================\n    def calculate_sma(prices, period):\n        if len(prices) < period:\n            return None\n        return round(sum(prices[-period:]) / period, 4)\n    \n    sma_20 = calculate_sma(closes, 20)\n    sma_50 = calculate_sma(closes, 50)\n    sma_200 = calculate_sma(closes, 200)\n    \n    # ============================================\n    # 3. EMA (Exponential Moving Average)\n    # ============================================\n    def calculate_ema(prices, period):\n        if len(prices) < period:\n            return None\n        \n        # Première EMA = SMA\n        ema = sum(prices[:period]) / period\n        multiplier = 2 / (period + 1)\n        \n        # Calculer EMA pour le reste\n        for price in prices[period:]:\n            ema = (price * multiplier) + (ema * (1 - multiplier))\n        \n        return round(ema, 4)\n    \n    ema_20 = calculate_ema(closes, 20)\n    \n    # ============================================\n    # 4. MACD (Moving Average Convergence Divergence)\n    # ============================================\n    def calculate_macd(prices, fast=12, slow=26, signal=9):\n        if len(prices) < slow:\n            return None, None, None\n        \n        # EMA rapide et lente\n        ema_fast = calculate_ema(prices, fast)\n        ema_slow = calculate_ema(prices, slow)\n        \n        if ema_fast is None or ema_slow is None:\n            return None, None, None\n        \n        macd_line = ema_fast - ema_slow\n        \n        # Signal line (EMA du MACD) - simplifié\n        macd_signal = macd_line * 0.8  # Approximation\n        macd_histogram = macd_line - macd_signal\n        \n        return (\n            round(macd_line, 4),\n            round(macd_signal, 4),\n            round(macd_histogram, 4)\n        )\n    \n    macd, macd_signal, macd_histogram = calculate_macd(closes)\n    \n    # ============================================\n    # 5. Bandes de Bollinger (20 périodes, 2 std dev)\n    # ============================================\n    def calculate_bollinger_bands(prices, period=20, std_dev=2):\n        if len(prices) < period:\n            return None, None, None\n        \n        # SMA\n        sma = sum(prices[-period:]) / period\n        \n        # Écart-type\n        variance = sum((p - sma) ** 2 for p in prices[-period:]) / period\n        std = math.sqrt(variance)\n        \n        upper = sma + (std_dev * std)\n        lower = sma - (std_dev * std)\n        \n        return (\n            round(upper, 4),\n            round(sma, 4),\n            round(lower, 4)\n        )\n    \n    bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(closes)\n    \n    # ============================================\n    # 6. ATR (Average True Range) - 14 périodes\n    # ============================================\n    def calculate_atr(highs, lows, closes, period=14):\n        if len(closes) < period + 1:\n            return None\n        \n        true_ranges = []\n        for i in range(1, len(closes)):\n            high_low = highs[i] - lows[i]\n            high_close = abs(highs[i] - closes[i-1])\n            low_close = abs(lows[i] - closes[i-1])\n            true_range = max(high_low, high_close, low_close)\n            true_ranges.append(true_range)\n        \n        # ATR = moyenne des true ranges\n        if len(true_ranges) >= period:\n            atr = sum(true_ranges[-period:]) / period\n            return round(atr, 4)\n        return None\n    \n    atr_14 = calculate_atr(highs, lows, closes, 14)\n    \n    # ============================================\n    # Signaux de trading\n    # ============================================\n    current_price = closes[-1]\n    \n    # Signal RSI\n    rsi_signal = None\n    if rsi_14 is not None:\n        if rsi_14 < 30:\n            rsi_signal = 'oversold'  # Survente\n        elif rsi_14 > 70:\n            rsi_signal = 'overbought'  # Surachat\n        else:\n            rsi_signal = 'neutral'\n    \n    # Signal tendance (SMA)\n    trend_signal = None\n    if sma_20 is not None and sma_50 is not None:\n        if current_price > sma_20 > sma_50:\n            trend_signal = 'bullish'  # Haussier\n        elif current_price < sma_20 < sma_50:\n            trend_signal = 'bearish'  # Baissier\n        else:\n            trend_signal = 'neutral'\n    \n    # Signal MACD\n    macd_signal_str = None\n    if macd is not None and macd_signal is not None:\n        if macd > macd_signal:\n            macd_signal_str = 'bullish'\n        elif macd < macd_signal:\n            macd_signal_str = 'bearish'\n        else:\n            macd_signal_str = 'neutral'\n    \n    # Retourner les résultats\n    return {\n        'json': {\n            'stock_id': stock_id,\n            'ticker': ticker,\n            'name': name,\n            'date': latest_date,\n            'close_price': round(current_price, 4),\n            \n            # Indicateurs\n            'rsi_14': rsi_14,\n            'sma_20': sma_20,\n            'sma_50': sma_50,\n            'sma_200': sma_200,\n            'ema_20': ema_20,\n            'macd': macd,\n            'macd_signal': macd_signal,\n            'macd_histogram': macd_histogram,\n            'bb_upper': bb_upper,\n            'bb_middle': bb_middle,\n            'bb_lower': bb_lower,\n            'atr_14': atr_14,\n            \n            # Signaux\n            'rsi_signal': rsi_signal,\n            'trend_signal': trend_signal,\n            'macd_signal_str': macd_signal_str,\n            \n            'success': True\n        }\n    }\n\nexcept Exception as error:\n    return {\n        'json': {\n            'stock_id': stock_id,\n            'ticker': ticker,\n            'success': False,\n            'error': str(error)\n        }\n    }"
+      },
+      "id": "calculate-indicators",
+      "name": "Calculer Indicateurs Python",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-success",
+      "name": "Filtrer succès",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO technical_indicators (\n  stock_id, date, close_price,\n  rsi_14, sma_20, sma_50, sma_200, ema_20,\n  macd, macd_signal, macd_histogram,\n  bb_upper, bb_middle, bb_lower,\n  atr_14,\n  rsi_signal, trend_signal, macd_signal,\n  created_at\n)\nVALUES (\n  {{ $json.stock_id }},\n  '{{ $json.date }}',\n  {{ $json.close_price }},\n  {{ $json.rsi_14 }},\n  {{ $json.sma_20 }},\n  {{ $json.sma_50 }},\n  {{ $json.sma_200 }},\n  {{ $json.ema_20 }},\n  {{ $json.macd }},\n  {{ $json.macd_signal }},\n  {{ $json.macd_histogram }},\n  {{ $json.bb_upper }},\n  {{ $json.bb_middle }},\n  {{ $json.bb_lower }},\n  {{ $json.atr_14 }},\n  '{{ $json.rsi_signal }}',\n  '{{ $json.trend_signal }}',\n  '{{ $json.macd_signal_str }}',\n  CURRENT_TIMESTAMP\n)\nON CONFLICT (stock_id, date)\nDO UPDATE SET\n  close_price = EXCLUDED.close_price,\n  rsi_14 = EXCLUDED.rsi_14,\n  sma_20 = EXCLUDED.sma_20,\n  sma_50 = EXCLUDED.sma_50,\n  sma_200 = EXCLUDED.sma_200,\n  ema_20 = EXCLUDED.ema_20,\n  macd = EXCLUDED.macd,\n  macd_signal = EXCLUDED.macd_signal,\n  macd_histogram = EXCLUDED.macd_histogram,\n  bb_upper = EXCLUDED.bb_upper,\n  bb_middle = EXCLUDED.bb_middle,\n  bb_lower = EXCLUDED.bb_lower,\n  atr_14 = EXCLUDED.atr_14,\n  rsi_signal = EXCLUDED.rsi_signal,\n  trend_signal = EXCLUDED.trend_signal,\n  macd_signal = EXCLUDED.macd_signal,\n  updated_at = CURRENT_TIMESTAMP\nRETURNING stock_id, ticker, date;",
+        "options": {}
+      },
+      "id": "insert-indicators",
+      "name": "Insérer Indicateurs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "system_logs",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_name": "technical-indicators-calculator",
+            "level": "info",
+            "message": "={{ 'Indicateurs calculés pour ' + $json.ticker }}",
+            "details": "={{ { stock_id: $json.stock_id, date: $json.date, ticker: $json.ticker } }}",
+            "created_at": "={{ $now }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-success",
+      "name": "Log succès",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1340, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL PEA Advisor"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Déclencheur Quotidien 19h15": {
+      "main": [[{"node": "Récupérer prix agrégés", "type": "main", "index": 0}]]
+    },
+    "Récupérer prix agrégés": {
+      "main": [[{"node": "Calculer Indicateurs Python", "type": "main", "index": 0}]]
+    },
+    "Calculer Indicateurs Python": {
+      "main": [[{"node": "Filtrer succès", "type": "main", "index": 0}]]
+    },
+    "Filtrer succès": {
+      "main": [[{"node": "Insérer Indicateurs", "type": "main", "index": 0}]]
+    },
+    "Insérer Indicateurs": {
+      "main": [[{"node": "Log succès", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {"id": "1", "name": "PEA Advisor"},
+    {"id": "3", "name": "Technical Analysis"},
+    {"id": "6", "name": "Indicators"}
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-03T13:00:00.000Z",
+  "versionId": "1.0"
+}

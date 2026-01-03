@@ -31,6 +31,16 @@ Créer un système intelligent de recommandations pour optimiser les placements 
   - Rate limiting: 2s entre requêtes
   - Documentation complète
 
+- ✅ **Workflow 03**: Technical Indicators Calculator (Local)
+  - Calcul local des indicateurs techniques (RSI, MACD, SMA, EMA, Bollinger, ATR)
+  - Implémentations Python pures (pas de dépendances TA-Lib requises)
+  - CTE SQL pour agréger 300 jours de prix en arrays
+  - Détection automatique de signaux (oversold/overbought, tendances)
+  - Mode Python: `runOnceForEachItem` (traite chaque stock individuellement)
+  - Durée: ~12 secondes pour 50 actions (vs 12 JOURS avec Alpha Vantage!)
+  - Schedule: 19h15 quotidien (après workflow 01)
+  - Documentation complète
+
 #### Documentation
 - ✅ Guide configuration API keys n8n (4 méthodes)
 - ✅ Guide Python variables n8n (_item vs item)
@@ -38,6 +48,7 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 - ✅ Guide workflow 00 (historical data loader)
 - ✅ Guide workflow 01 (market data)
 - ✅ Guide workflow 02 (news collector)
+- ✅ Guide workflow 03 (technical indicators calculator)
 - ✅ Notes dépréciation Alpha Vantage
 - ✅ Fichier .claude pour le projet
 
@@ -51,53 +62,9 @@ Créer un système intelligent de recommandations pour optimiser les placements 
 
 ## 🔥 Prochaines Priorités (Par Ordre)
 
-### 🔴 PRIORITÉ CRITIQUE
-
-#### 1. Workflow 03: Technical Indicators Calculator (Local) ⚡️
-**Statut**: 📋 À faire
-**Durée estimée**: 4h de développement
-**Dépendances**: ✅ Workflow 00 (historique) - COMPLÉTÉ
-
-**Pourquoi local et pas API externe**:
-- ❌ Alpha Vantage: 1 req/sec, 25 req/jour → 50 actions = 2 jours minimum
-- ❌ Version payante: $50/mois
-- ✅ **TA-Lib local**: Gratuit, illimité, 1000x plus rapide (5 secondes pour 50 actions)
-
-**Indicateurs à calculer**:
-1. RSI (14 jours) - Relative Strength Index
-2. MACD (12, 26, 9) - Moving Average Convergence Divergence
-3. SMA (20, 50, 200) - Simple Moving Average
-4. EMA (20) - Exponential Moving Average
-5. Bandes de Bollinger (20, 2)
-6. ATR (14) - Average True Range
-
-**Architecture**:
-```
-Trigger quotidien (19h15, après workflow 01)
-  ↓
-SELECT stocks (actives + PEA eligible)
-  ↓
-Pour chaque action:
-  SELECT last 250 days FROM stock_prices
-  ↓
-Python Code (TA-Lib):
-  - Calcul tous les indicateurs en une passe
-  - Détection signaux (surachat/survente, croisements)
-  ↓
-INSERT/UPDATE technical_indicators
-  ↓
-Log success
-```
-
-**Dépendances techniques**:
-- Installation TA-Lib dans environnement Python n8n
-- Tables: `stock_prices` (source), `technical_indicators` (destination)
-
----
-
 ### 🟡 PRIORITÉ MOYENNE
 
-#### 3. Workflow 08: AI News Analyzer 🤖
+#### 1. Workflow 08: AI News Analyzer 🤖
 **Statut**: 📋 À faire
 **Durée estimée**: 3h
 **Dépendances**: Workflow 02 (news collector)
@@ -134,7 +101,7 @@ Log success
 
 ---
 
-#### 4. Workflow 04: Fundamental Data Collector 📊
+#### 2. Workflow 04: Fundamental Data Collector 📊
 **Statut**: 📋 À faire
 **Durée estimée**: 5h
 
@@ -455,12 +422,13 @@ Log success
 ---
 
 **Dernière mise à jour** : 3 janvier 2026
-**Version** : 1.2
+**Version** : 1.3
 **Statut** : 🚧 En construction active
 
-**Progression**: 3/17 workflows complétés (18%)
+**Progression**: 4/17 workflows complétés (24%)
 - ✅ Workflow 00: Historical Data Loader
 - ✅ Workflow 01: Daily Market Data Collector
 - ✅ Workflow 02: News Collector
-- 🔜 Workflow 03: Technical Indicators Calculator (PRIORITÉ CRITIQUE)
-- 🔜 Workflow 08: AI News Analyzer
+- ✅ Workflow 03: Technical Indicators Calculator
+- 🔜 Workflow 08: AI News Analyzer (PRIORITÉ MOYENNE)
+- 🔜 Workflow 04: Fundamental Data Collector

@@ -175,6 +175,7 @@ n8n execute --id <workflow-id>
 - **Workflow 00 - Historical Data Loader** ⚡: `/docs/workflow-00-historical-data-loader-guide.md` (CRITIQUE)
 - **Workflow 01 - Prix de marché**: `/docs/workflow-01-guide.md`
 - **Workflow 02 - News Collector**: `/docs/workflow-02-news-collector-guide.md`
+- **Workflow 03 - Technical Indicators** 📊: `/docs/workflow-03-technical-indicators-guide.md`
 - **Configuration API Keys n8n** 🔑: `/docs/n8n-api-keys-setup.md`
 - **Migration Python**: `/docs/python-migration-guide.md`
 - **Architecture Python + Merge**: `/docs/python-workflow-architecture.md`
@@ -199,12 +200,13 @@ n8n execute --id <workflow-id>
 7. **TODO**: Voir `/TODO.md` pour la liste complète des tâches et la roadmap. Mettre à jour régulièrement avec les progrès.
 ## Statut du Projet
 
-**Version**: 1.2
+**Version**: 1.3
 **Dernière mise à jour**: 3 janvier 2026
 **Statut**: En développement actif
 
-**Workflows complétés**: 3/17 (18%)
+**Workflows complétés**: 4/17 (24%)
 - ✅ Workflow 00: Historical Data Loader (CRITIQUE - charge 250 jours d'historique)
 - ✅ Workflow 01: Daily Market Data Collector
 - ✅ Workflow 02: News Collector
+- ✅ Workflow 03: Technical Indicators Calculator (RSI, MACD, SMA, EMA, Bollinger, ATR)
 
