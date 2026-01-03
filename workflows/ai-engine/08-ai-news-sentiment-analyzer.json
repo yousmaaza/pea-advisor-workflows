@@ -39,34 +39,13 @@
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "prompt_text",
-              "name": "prompt_text",
-              "value": "={{ \"Tu es un analyste financier expert. Analyse le sentiment de cet article financier et retourne UNIQUEMENT un JSON valide sans texte supplémentaire ni markdown.\\n\\nTitre: \" + $json.title + \"\\n\\nDescription: \" + ($json.description || 'N/A') + \"\\n\\nContenu: \" + (($json.content || 'N/A').substring(0, 1000)) + \"\\n\\nRetourne UNIQUEMENT ce JSON (sans ```json, sans explication) :\\n{\\n  \\\"sentiment_score\\\": [nombre entre -10 et +10],\\n  \\\"sentiment_label\\\": \\\"negative\\\" ou \\\"neutral\\\" ou \\\"positive\\\",\\n  \\\"impact_score\\\": [nombre entre 0 et 10],\\n  \\\"ai_summary\\\": \\\"résumé en 2-3 phrases maximum\\\",\\n  \\\"ai_key_points\\\": [\\\"point 1\\\", \\\"point 2\\\", \\\"point 3\\\"]\\n}\" }}",
-              "type": "string"
-            },
-            {
-              "id": "news_id",
-              "name": "news_id",
-              "value": "={{ $json.id }}",
-              "type": "number"
-            },
-            {
-              "id": "stock_id",
-              "name": "stock_id",
-              "value": "={{ $json.stock_id }}",
-              "type": "number"
-            }
-          ]
-        },
-        "options": {}
+        "mode": "runOnceForEachItem",
+        "jsCode": "const newsData = $input.item.json;\n\n// Construire le prompt\nconst prompt = `Tu es un analyste financier expert. Analyse le sentiment de cet article financier et retourne UNIQUEMENT un JSON valide sans texte supplémentaire ni markdown.\n\nTitre: ${newsData.title}\n\nDescription: ${newsData.description || 'N/A'}\n\nContenu: ${(newsData.content || 'N/A').substring(0, 1000)}\n\nRetourne UNIQUEMENT ce JSON (sans \\`\\`\\`json, sans explication) :\n{\n  \"sentiment_score\": [nombre entre -10 et +10],\n  \"sentiment_label\": \"negative\" ou \"neutral\" ou \"positive\",\n  \"impact_score\": [nombre entre 0 et 10],\n  \"ai_summary\": \"résumé en 2-3 phrases maximum\",\n  \"ai_key_points\": [\"point 1\", \"point 2\", \"point 3\"]\n}`;\n\nreturn {\n  json: {\n    prompt_text: prompt,\n    news_id: newsData.id,\n    stock_id: newsData.stock_id\n  }\n};"
       },
       "id": "prepare-prompt",
       "name": "Préparer Prompt + Context",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [680, 300]
     },
     {
@@ -227,6 +206,6 @@
     {"id": "4", "name": "News"}
   ],
   "triggerCount": 1,
-  "updatedAt": "2026-01-03T21:00:00.000Z",
-  "versionId": "2.0"
+  "updatedAt": "2026-01-03T22:00:00.000Z",
+  "versionId": "2.1"
 }
