@@ -39,18 +39,38 @@
     },
     {
       "parameters": {
-        "url": "=https://query1.finance.yahoo.com/v10/finance/quoteSummary/{{ $json.ticker }}?modules=defaultKeyStatistics,financialData,summaryDetail",
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Récupérer toutes les actions\nconst stocks = $input.all();\n\n// Faire UNE requête pour obtenir le crumb Yahoo Finance\nconst crumbUrl = 'https://query2.finance.yahoo.com/v1/test/getcrumb';\n\ntry {\n  const response = await fetch(crumbUrl, {\n    headers: {\n      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'\n    }\n  });\n  \n  const crumb = await response.text();\n  \n  // Attacher le crumb à chaque action\n  return stocks.map(item => ({\n    json: {\n      ...item.json,\n      crumb: crumb.trim()\n    }\n  }));\n  \n} catch (error) {\n  // En cas d'erreur, retourner les stocks sans crumb\n  console.error('Erreur récupération crumb:', error);\n  return stocks.map(item => ({\n    json: {\n      ...item.json,\n      crumb: '',\n      crumb_error: error.message\n    }\n  }));\n}"
+      },
+      "id": "get-attach-crumb",
+      "name": "Obtenir et Attacher Crumb",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://query2.finance.yahoo.com/v10/finance/quoteSummary/{{ $json.ticker }}?modules=defaultKeyStatistics,financialData,summaryDetail&crumb={{ $json.crumb }}",
         "options": {
           "timeout": 10000,
           "batchSize": 1,
           "batchInterval": 2000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            }
+          ]
         }
       },
       "id": "fetch-yahoo",
       "name": "Yahoo Finance API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [680, 200]
+      "position": [1120, 200]
     },
     {
       "parameters": {
@@ -146,6 +166,9 @@
       "main": [[{"node": "Récupérer les actions", "type": "main", "index": 0}]]
     },
     "Récupérer les actions": {
+      "main": [[{"node": "Obtenir et Attacher Crumb", "type": "main", "index": 0}]]
+    },
+    "Obtenir et Attacher Crumb": {
       "main": [
         [
           {"node": "Yahoo Finance API", "type": "main", "index": 0},
@@ -181,6 +204,6 @@
     {"id": "2", "name": "Data Collection"}
   ],
   "triggerCount": 1,
-  "updatedAt": "2026-01-04T00:00:00.000Z",
-  "versionId": "1.0"
+  "updatedAt": "2026-01-04T14:30:00.000Z",
+  "versionId": "1.1"
 }
