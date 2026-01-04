@@ -71,7 +71,10 @@ Le système doit TOUJOURS respecter les règles du PEA:
   - Pas d'accès à `$itemIndex` ou `$node` en Python (d'où le besoin du Merge)
   - Mode: `runOnceForEachItem` avec `language: "python"`
   - Configuration Merge: `"mode": "combine"` et `"combinationMode": "mergeByPosition"`
-  - Imports disponibles: `datetime`, `json`, etc.
+  - **Bibliothèques Python disponibles**:
+    - ✅ Standard library: `datetime`, `json`, `re`, `urllib`, `zoneinfo`, etc.
+    - ❌ Packages tiers NON disponibles: `requests`, `numpy`, `pandas`, etc.
+    - ⚠️ Pour HTTP requests: utiliser `urllib.request` (pas `requests`)
   - **Guide variables Python**: `docs/python-variables-n8n.md` (_item vs item)
   - **Architecture détaillée**: `docs/python-workflow-architecture.md`
   - **Guide de migration**: `docs/python-migration-guide.md`
